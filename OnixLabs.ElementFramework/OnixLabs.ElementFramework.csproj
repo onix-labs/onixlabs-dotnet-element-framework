@@ -1,0 +1,10 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <IsPackable>true</IsPackable>
+        <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
+    </PropertyGroup>
+    <ItemGroup>
+        <InternalsVisibleTo Include="OnixLabs.ElementFramework.UnitTests"/>
+        <ProjectReference Include="..\OnixLabs.ElementFramework.Abstractions\OnixLabs.ElementFramework.Abstractions.csproj"/>
+    </ItemGroup>
+</Project>

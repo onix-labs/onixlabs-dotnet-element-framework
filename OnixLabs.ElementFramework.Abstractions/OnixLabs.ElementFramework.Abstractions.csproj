@@ -1,0 +1,12 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <IsPackable>true</IsPackable>
+        <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
+        <RootNamespace>OnixLabs.ElementFramework</RootNamespace>
+    </PropertyGroup>
+    <ItemGroup>
+        <InternalsVisibleTo Include="OnixLabs.ElementFramework"/>
+        <InternalsVisibleTo Include="OnixLabs.ElementFramework.UnitTests"/>
+        <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.7"/>
+    </ItemGroup>
+</Project>

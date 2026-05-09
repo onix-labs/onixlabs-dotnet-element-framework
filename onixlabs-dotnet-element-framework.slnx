@@ -1,0 +1,13 @@
+<Solution>
+  <Folder Name="/Abstractions/">
+    <Project Path="OnixLabs.ElementFramework.Abstractions/OnixLabs.ElementFramework.Abstractions.csproj" />
+  </Folder>
+  <Folder Name="/Implementations/">
+    <Project Path="OnixLabs.ElementFramework.Neo4j/OnixLabs.ElementFramework.Neo4j.csproj" />
+    <Project Path="OnixLabs.ElementFramework/OnixLabs.ElementFramework.csproj" />
+  </Folder>
+  <Folder Name="/Tests/">
+    <Project Path="OnixLabs.ElementFramework.Neo4j.IntegrationTests/OnixLabs.ElementFramework.Neo4j.IntegrationTests.csproj" />
+    <Project Path="OnixLabs.ElementFramework.UnitTests/OnixLabs.ElementFramework.UnitTests.csproj" />
+  </Folder>
+</Solution>

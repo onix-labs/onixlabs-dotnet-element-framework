@@ -1,0 +1,19 @@
+<Project>
+    <PropertyGroup>
+        <Version>1.0.0</Version>
+        <PackageVersion>1.0.0</PackageVersion>
+        <AssemblyVersion>1.0.0</AssemblyVersion>
+
+        <TargetFrameworks>net8.0;net9.0;net10.0</TargetFrameworks>
+        <LangVersion>14</LangVersion>
+        <Nullable>enable</Nullable>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <IsPackable>false</IsPackable>
+        <GeneratePackageOnBuild>false</GeneratePackageOnBuild>
+
+        <Authors>ONIXLabs</Authors>
+        <NeutralLanguage>en</NeutralLanguage>
+        <Copyright>Copyright © ONIXLabs 2020</Copyright>
+        <RepositoryUrl>https://github.com/onix-labs/onixlabs-dotnet-element-framework</RepositoryUrl>
+    </PropertyGroup>
+</Project>

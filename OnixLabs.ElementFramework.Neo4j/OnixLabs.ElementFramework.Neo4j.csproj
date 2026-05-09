@@ -1,0 +1,13 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <IsPackable>true</IsPackable>
+        <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
+        <RootNamespace>OnixLabs.ElementFramework</RootNamespace>
+    </PropertyGroup>
+    <ItemGroup>
+      <ProjectReference Include="..\OnixLabs.ElementFramework\OnixLabs.ElementFramework.csproj" />
+    </ItemGroup>
+    <ItemGroup>
+      <PackageReference Include="Neo4j.Driver" Version="6.0.0" />
+    </ItemGroup>
+</Project>
