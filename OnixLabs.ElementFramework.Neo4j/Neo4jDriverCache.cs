@@ -26,13 +26,16 @@ using Neo4j.Driver;
 namespace OnixLabs.ElementFramework;
 
 /// <summary>
-/// Provides a process-wide cache of <see cref="IDriver"/> instances keyed by connection string and auth token.
+/// Represents a process-wide cache of <see cref="IDriver"/> instances keyed by connection string and auth token.
 /// </summary>
 /// <remarks>
 /// Neo4j drivers are designed for application-singleton reuse — they manage their own connection pool internally and creating one per call leaks pooled connections. Tests that spin up many Testcontainer instances are the practical motivation: each container has a unique connection string so the cache grows one entry per container, and drivers are reused across the many <c>AddGraphContext</c> calls within a single fixture. Auth-token equality is reference-based because <see cref="IAuthToken"/> does not override equality; if two callers construct equivalent auth tokens via separate <c>AuthTokens.Basic(...)</c> calls and pass them into <c>UseNeo4j</c>, two drivers will be created.
 /// </remarks>
 internal static class Neo4jDriverCache
 {
+    /// <summary>
+    /// The cache of <see cref="IDriver"/> instances keyed by connection string and auth token.
+    /// </summary>
     private static readonly ConcurrentDictionary<DriverKey, IDriver> Drivers = new();
 
     /// <summary>
@@ -40,11 +43,16 @@ internal static class Neo4jDriverCache
     /// </summary>
     /// <param name="connectionString">The Bolt connection URI (e.g. <c>bolt://localhost:7687</c> or <c>neo4j://...</c>).</param>
     /// <param name="authToken">The auth token to bind the driver with, or <see langword="null"/> for unauthenticated.</param>
-    /// <returns>The shared <see cref="IDriver"/> instance for the supplied key.</returns>
+    /// <returns>Returns the shared <see cref="IDriver"/> instance for the supplied key.</returns>
     public static IDriver GetOrCreate(string connectionString, IAuthToken? authToken) => Drivers.GetOrAdd(
         new DriverKey(connectionString, authToken),
         static key => GraphDatabase.Driver(key.ConnectionString, key.AuthToken ?? AuthTokens.None)
     );
 
+    /// <summary>
+    /// Represents the composite cache key formed from a connection string and an optional <see cref="IAuthToken"/>.
+    /// </summary>
+    /// <param name="ConnectionString">The Bolt connection URI used to construct the driver.</param>
+    /// <param name="AuthToken">The auth token bound to the driver, or <see langword="null"/> for unauthenticated.</param>
     private readonly record struct DriverKey(string ConnectionString, IAuthToken? AuthToken);
 }

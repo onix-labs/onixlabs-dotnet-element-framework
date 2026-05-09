@@ -43,7 +43,14 @@ internal sealed class GraphSetFactory(
     IResultMaterializer materializer
 ) : IGraphSetFactory
 {
+    /// <summary>
+    /// The cache of typed <see cref="NodeSet{T}"/> instances keyed by node CLR type.
+    /// </summary>
     private readonly ConcurrentDictionary<Type, object> nodeSets = new();
+
+    /// <summary>
+    /// The cache of typed <see cref="EdgeSet{T}"/> instances keyed by edge CLR type.
+    /// </summary>
     private readonly ConcurrentDictionary<Type, object> edgeSets = new();
 
     /// <inheritdoc/>

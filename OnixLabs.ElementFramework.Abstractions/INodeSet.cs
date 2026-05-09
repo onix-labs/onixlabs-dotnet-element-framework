@@ -31,7 +31,7 @@ public interface INodeSet<T> where T : class
     /// <summary>
     /// Returns the set as a synchronously enumerable sequence over all nodes of the type in the graph.
     /// </summary>
-    /// <returns>An enumerable over the nodes. Construction is eager; enumeration is lazy.</returns>
+    /// <returns>Returns an enumerable over the nodes. Construction is eager; enumeration is lazy.</returns>
     /// <exception cref="GraphContextException">Thrown when the query cannot be constructed.</exception>
     IEnumerable<T> AsEnumerable();
 
@@ -39,7 +39,7 @@ public interface INodeSet<T> where T : class
     /// Returns the set as an asynchronously enumerable sequence over all nodes of the type in the graph.
     /// </summary>
     /// <param name="token">The token that may be used to cancel the enumeration.</param>
-    /// <returns>An asynchronous enumerable over the nodes.</returns>
+    /// <returns>Returns an asynchronous enumerable over the nodes.</returns>
     /// <exception cref="GraphContextException">Thrown when the query cannot be constructed.</exception>
     IAsyncEnumerable<T> AsAsyncEnumerable(CancellationToken token = default);
 
@@ -47,7 +47,7 @@ public interface INodeSet<T> where T : class
     /// Determines whether a node with the specified identifier exists in the graph.
     /// </summary>
     /// <param name="id">The natural identifier configured for the node type via the model.</param>
-    /// <returns><see langword="true"/> if a node with the specified identifier exists; otherwise <see langword="false"/>.</returns>
+    /// <returns>Returns <see langword="true"/> if a node with the specified identifier exists; otherwise <see langword="false"/>.</returns>
     /// <exception cref="GraphContextException">Thrown when the existence check fails.</exception>
     bool Exists(object id);
 
@@ -56,7 +56,7 @@ public interface INodeSet<T> where T : class
     /// </summary>
     /// <param name="id">The natural identifier configured for the node type via the model.</param>
     /// <param name="token">The token that may be used to cancel the operation.</param>
-    /// <returns>A task that resolves to <see langword="true"/> if a node with the specified identifier exists; otherwise <see langword="false"/>.</returns>
+    /// <returns>Returns a task that resolves to <see langword="true"/> if a node with the specified identifier exists; otherwise <see langword="false"/>.</returns>
     /// <exception cref="GraphContextException">Thrown when the existence check fails.</exception>
     Task<bool> ExistsAsync(object id, CancellationToken token = default);
 
@@ -64,7 +64,7 @@ public interface INodeSet<T> where T : class
     /// Finds a node in the graph by identifier.
     /// </summary>
     /// <param name="id">The natural identifier configured for the node type via the model.</param>
-    /// <returns>The matching node, or <see langword="null"/> if no node with the specified identifier exists.</returns>
+    /// <returns>Returns the matching node, or <see langword="null"/> if no node with the specified identifier exists.</returns>
     /// <exception cref="GraphContextException">Thrown when the lookup fails.</exception>
     T? FindById(object id);
 
@@ -73,7 +73,7 @@ public interface INodeSet<T> where T : class
     /// </summary>
     /// <param name="id">The natural identifier configured for the node type via the model.</param>
     /// <param name="token">The token that may be used to cancel the operation.</param>
-    /// <returns>A task that resolves to the matching node, or <see langword="null"/> if no node with the specified identifier exists.</returns>
+    /// <returns>Returns a task that resolves to the matching node, or <see langword="null"/> if no node with the specified identifier exists.</returns>
     /// <exception cref="GraphContextException">Thrown when the lookup fails.</exception>
     Task<T?> FindByIdAsync(object id, CancellationToken token = default);
 
@@ -89,7 +89,7 @@ public interface INodeSet<T> where T : class
     /// </summary>
     /// <param name="node">The node to add.</param>
     /// <param name="token">The token that may be used to cancel the operation.</param>
-    /// <returns>A task that represents the staging operation.</returns>
+    /// <returns>Returns a task that represents the staging operation.</returns>
     /// <exception cref="GraphContextException">Thrown when the operation cannot be staged.</exception>
     Task AddAsync(T node, CancellationToken token = default);
 
@@ -105,7 +105,7 @@ public interface INodeSet<T> where T : class
     /// </summary>
     /// <param name="node">The node to update.</param>
     /// <param name="token">The token that may be used to cancel the operation.</param>
-    /// <returns>A task that represents the staging operation.</returns>
+    /// <returns>Returns a task that represents the staging operation.</returns>
     /// <exception cref="GraphContextException">Thrown when the operation cannot be staged.</exception>
     Task UpdateAsync(T node, CancellationToken token = default);
 
@@ -121,7 +121,7 @@ public interface INodeSet<T> where T : class
     /// </summary>
     /// <param name="node">The node to remove.</param>
     /// <param name="token">The token that may be used to cancel the operation.</param>
-    /// <returns>A task that represents the staging operation.</returns>
+    /// <returns>Returns a task that represents the staging operation.</returns>
     /// <exception cref="GraphContextException">Thrown when the operation cannot be staged.</exception>
     Task RemoveAsync(T node, CancellationToken token = default);
 
@@ -137,7 +137,7 @@ public interface INodeSet<T> where T : class
     /// </summary>
     /// <param name="node">The node to merge.</param>
     /// <param name="token">The token that may be used to cancel the operation.</param>
-    /// <returns>A task that represents the staging operation.</returns>
+    /// <returns>Returns a task that represents the staging operation.</returns>
     /// <exception cref="GraphContextException">Thrown when the operation cannot be staged.</exception>
     Task MergeAsync(T node, CancellationToken token = default);
 }

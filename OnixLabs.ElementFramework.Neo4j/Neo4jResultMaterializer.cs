@@ -36,6 +36,9 @@ namespace OnixLabs.ElementFramework;
 /// </remarks>
 internal sealed class Neo4jResultMaterializer : IResultMaterializer
 {
+    /// <summary>
+    /// Cache of compiled parameterless-constructor delegates keyed by CLR type, used by <see cref="Materialize{T}"/>.
+    /// </summary>
     private readonly ConcurrentDictionary<Type, Func<object>> instantiators = new();
 
     /// <inheritdoc/>
@@ -48,6 +51,13 @@ internal sealed class Neo4jResultMaterializer : IResultMaterializer
         ? Materialize<T>(model.GetRelationship(typeof(T)).Properties, relationship.Properties)
         : throw new ResultMaterializationException($"Expected an IRelationship at row alias '{alias}', got {row[alias]?.GetType().FullName ?? "null"}.");
 
+    /// <summary>
+    /// Constructs a CLR instance of <typeparamref name="T"/> and assigns each mapped property from <paramref name="source"/>.
+    /// </summary>
+    /// <typeparam name="T">The CLR type of the materialized instance.</typeparam>
+    /// <param name="properties">The mapped property metadata for the type.</param>
+    /// <param name="source">The Bolt entity properties keyed by stored name.</param>
+    /// <returns>Returns the populated CLR instance.</returns>
     private T Materialize<T>(IReadOnlyList<IPropertyMetadata> properties, IReadOnlyDictionary<string, object> source)
     {
         T instance = (T)instantiators.GetOrAdd(typeof(T), BuildInstantiator)();
@@ -62,6 +72,11 @@ internal sealed class Neo4jResultMaterializer : IResultMaterializer
         return instance;
     }
 
+    /// <summary>
+    /// Builds a delegate that constructs an instance of <paramref name="type"/>, preferring its parameterless constructor and falling back to <see cref="RuntimeHelpers.GetUninitializedObject(Type)"/> when none exists.
+    /// </summary>
+    /// <param name="type">The CLR type to build an instantiator for.</param>
+    /// <returns>Returns a delegate that produces a fresh instance of <paramref name="type"/>.</returns>
     private static Func<object> BuildInstantiator(Type type)
     {
         ConstructorInfo? parameterless = type.GetConstructor(
@@ -75,6 +90,12 @@ internal sealed class Neo4jResultMaterializer : IResultMaterializer
             : () => RuntimeHelpers.GetUninitializedObject(type);
     }
 
+    /// <summary>
+    /// Converts a Bolt-side <paramref name="value"/> to the CLR <paramref name="targetType"/>, applying the inverse of <see cref="PropertySerializer"/>.
+    /// </summary>
+    /// <param name="value">The raw Bolt value, possibly <see langword="null"/>.</param>
+    /// <param name="targetType">The CLR property type to convert to.</param>
+    /// <returns>Returns the converted CLR value, or <see langword="null"/> when <paramref name="value"/> is <see langword="null"/>.</returns>
     private static object? Convert(object? value, Type targetType)
     {
         if (value is null) return null;

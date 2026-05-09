@@ -37,6 +37,6 @@ public interface IPatternRelationshipDirected<TStart, TEdge, TEnd>
     /// Binds the end node to the supplied alias and continues the pattern.
     /// </summary>
     /// <param name="alias">The alias used to reference the bound end node.</param>
-    /// <returns>An <see cref="IPatternNode{TEnd}"/> stage scoped to the bound end alias.</returns>
+    /// <returns>Returns an <see cref="IPatternNode{TEnd}"/> stage scoped to the bound end alias.</returns>
     IPatternNode<TEnd> To(string alias);
 }

@@ -60,6 +60,11 @@ internal sealed class PropertyMetadata : IPropertyMetadata
     /// <inheritdoc/>
     public Action<object, object?> Setter { get; }
 
+    /// <summary>
+    /// Compiles a delegate that reads the value of <paramref name="property"/> from a boxed instance.
+    /// </summary>
+    /// <param name="property">The property to read from.</param>
+    /// <returns>Returns a delegate that reads <paramref name="property"/> from a boxed instance.</returns>
     private static Func<object, object?> CompileGetter(PropertyInfo property)
     {
         ParameterExpression instance = Expression.Parameter(typeof(object), "instance");
@@ -69,6 +74,11 @@ internal sealed class PropertyMetadata : IPropertyMetadata
         return Expression.Lambda<Func<object, object?>>(boxed, instance).Compile();
     }
 
+    /// <summary>
+    /// Compiles a delegate that writes a value to <paramref name="property"/> on a boxed instance.
+    /// </summary>
+    /// <param name="property">The property to write to.</param>
+    /// <returns>Returns a delegate that writes a boxed value to <paramref name="property"/>.</returns>
     private static Action<object, object?> CompileSetter(PropertyInfo property)
     {
         ParameterExpression instance = Expression.Parameter(typeof(object), "instance");

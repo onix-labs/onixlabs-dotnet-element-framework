@@ -281,6 +281,12 @@ internal sealed class CypherEmitter : IStatementEmitter
         return new DataStatement(builder.ToString(), binder.ToParameters());
     }
 
+    /// <summary>
+    /// Appends the pattern segments of <paramref name="segments"/> to <paramref name="builder"/> as Cypher node and relationship syntax.
+    /// </summary>
+    /// <param name="builder">The <see cref="StringBuilder"/> that receives the emitted pattern.</param>
+    /// <param name="model">The graph model used to resolve labels and relationship types.</param>
+    /// <param name="segments">The pattern segments to emit, in order.</param>
     private static void AppendPattern(StringBuilder builder, IGraphModel model, IReadOnlyList<PatternSegment> segments)
     {
         for (int i = 0; i < segments.Count; i++)
@@ -289,7 +295,11 @@ internal sealed class CypherEmitter : IStatementEmitter
             {
                 case NodePatternSegment node:
                     INodeMetadata nodeMeta = model.GetNode(node.NodeType);
-                    builder.Append('(').Append(CypherIdentifier.Escape(node.Alias)).Append(':').Append(CypherIdentifier.Escape(nodeMeta.Label)).Append(')');
+                    builder.Append('(')
+                        .Append(CypherIdentifier.Escape(node.Alias))
+                        .Append(':')
+                        .Append(CypherIdentifier.Escape(nodeMeta.Label))
+                        .Append(')');
                     break;
                 case RelationshipPatternSegment relationship:
                     IRelationshipMetadata relMeta = model.GetRelationship(relationship.EdgeType);
@@ -308,7 +318,20 @@ internal sealed class CypherEmitter : IStatementEmitter
         }
     }
 
-    private static void AppendPredicate(StringBuilder builder, ParameterBinder binder, IGraphModel model, TraversalAst ast, TraversalPredicate predicate)
+    /// <summary>
+    /// Appends a single traversal predicate to <paramref name="builder"/> as a Cypher equality expression and binds its value to <paramref name="binder"/>.
+    /// </summary>
+    /// <param name="builder">The <see cref="StringBuilder"/> that receives the emitted predicate.</param>
+    /// <param name="binder">The parameter binder that captures the predicate value.</param>
+    /// <param name="model">The graph model used to resolve the predicate property.</param>
+    /// <param name="ast">The traversal AST that owns the predicate.</param>
+    /// <param name="predicate">The predicate to emit.</param>
+    private static void AppendPredicate(
+        StringBuilder builder,
+        ParameterBinder binder,
+        IGraphModel model,
+        TraversalAst ast,
+        TraversalPredicate predicate)
     {
         IPropertyMetadata property = ResolvePredicateProperty(model, ast, predicate);
         string token = binder.Bind(property.Name, PropertySerializer.Serialize(predicate.Value));
@@ -319,6 +342,14 @@ internal sealed class CypherEmitter : IStatementEmitter
             .Append(token);
     }
 
+    /// <summary>
+    /// Resolves the <see cref="IPropertyMetadata"/> referenced by <paramref name="predicate"/> on its bound segment within <paramref name="ast"/>.
+    /// </summary>
+    /// <param name="model">The graph model used to look up node and relationship metadata.</param>
+    /// <param name="ast">The traversal AST that owns the predicate.</param>
+    /// <param name="predicate">The predicate whose property is being resolved.</param>
+    /// <returns>Returns the <see cref="IPropertyMetadata"/> matching the predicate's CLR property name on its bound alias.</returns>
+    /// <exception cref="StatementEmissionException">Thrown when the predicate references an unbound alias or a property that is not mapped on that alias.</exception>
     private static IPropertyMetadata ResolvePredicateProperty(IGraphModel model, TraversalAst ast, TraversalPredicate predicate)
     {
         PatternSegment segment = ast.Segments.FirstOrDefault(s => s.Alias == predicate.Alias)
@@ -336,6 +367,12 @@ internal sealed class CypherEmitter : IStatementEmitter
                    $"Predicate references property '{predicate.ClrPropertyName}' which is not mapped on alias '{predicate.Alias}'.");
     }
 
+    /// <summary>
+    /// Returns the Cypher keyword that opens a traversal of the supplied <paramref name="kind"/>.
+    /// </summary>
+    /// <param name="kind">The traversal kind to translate.</param>
+    /// <returns>Returns the Cypher keyword for <paramref name="kind"/>.</returns>
+    /// <exception cref="StatementEmissionException">Thrown when <paramref name="kind"/> is not a recognized traversal kind.</exception>
     private static string KeywordFor(TraversalKind kind) => kind switch
     {
         TraversalKind.Match => "MATCH",

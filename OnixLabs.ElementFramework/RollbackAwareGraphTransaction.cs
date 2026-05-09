@@ -37,6 +37,9 @@ namespace OnixLabs.ElementFramework;
 /// <param name="tracker">The owning context's <see cref="IChangeTracker"/> that the decorator keeps in sync with the underlying transaction's outcome.</param>
 internal sealed class RollbackAwareGraphTransaction(IGraphTransaction inner, IChangeTracker tracker) : IGraphTransaction
 {
+    /// <summary>
+    /// Indicates whether <see cref="Dispose"/> or <see cref="DisposeAsync"/> should reset the change tracker. Cleared when the outcome is already known via an explicit commit or rollback.
+    /// </summary>
     private bool resetOnDispose = true;
 
     /// <inheritdoc/>

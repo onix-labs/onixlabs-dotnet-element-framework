@@ -33,7 +33,7 @@ public interface IStatementEmitter
     /// <typeparam name="T">The CLR type of the node being added.</typeparam>
     /// <param name="model">The frozen graph model used to resolve metadata.</param>
     /// <param name="node">The node instance to be added.</param>
-    /// <returns>The provider statement that performs the add operation.</returns>
+    /// <returns>Returns the provider statement that performs the add operation.</returns>
     /// <exception cref="StatementEmissionException">Thrown when the statement cannot be emitted.</exception>
     DataStatement EmitAdd<T>(IGraphModel model, T node);
 
@@ -43,7 +43,7 @@ public interface IStatementEmitter
     /// <typeparam name="T">The CLR type of the node being updated.</typeparam>
     /// <param name="model">The frozen graph model used to resolve metadata.</param>
     /// <param name="node">The node instance to be updated.</param>
-    /// <returns>The provider statement that performs the update operation.</returns>
+    /// <returns>Returns the provider statement that performs the update operation.</returns>
     /// <exception cref="StatementEmissionException">Thrown when the statement cannot be emitted.</exception>
     DataStatement EmitUpdate<T>(IGraphModel model, T node);
 
@@ -53,7 +53,7 @@ public interface IStatementEmitter
     /// <typeparam name="T">The CLR type of the node being removed.</typeparam>
     /// <param name="model">The frozen graph model used to resolve metadata.</param>
     /// <param name="node">The node instance to be removed.</param>
-    /// <returns>The provider statement that performs the remove operation.</returns>
+    /// <returns>Returns the provider statement that performs the remove operation.</returns>
     /// <exception cref="StatementEmissionException">Thrown when the statement cannot be emitted.</exception>
     DataStatement EmitRemove<T>(IGraphModel model, T node);
 
@@ -63,7 +63,7 @@ public interface IStatementEmitter
     /// <typeparam name="T">The CLR type of the node being merged.</typeparam>
     /// <param name="model">The frozen graph model used to resolve metadata.</param>
     /// <param name="node">The node instance to be merged.</param>
-    /// <returns>The provider statement that performs the merge operation.</returns>
+    /// <returns>Returns the provider statement that performs the merge operation.</returns>
     /// <exception cref="StatementEmissionException">Thrown when the statement cannot be emitted.</exception>
     DataStatement EmitMerge<T>(IGraphModel model, T node);
 
@@ -77,7 +77,7 @@ public interface IStatementEmitter
     /// <param name="start">The start node of the relationship.</param>
     /// <param name="edge">The edge instance carrying the relationship's properties.</param>
     /// <param name="end">The end node of the relationship.</param>
-    /// <returns>The provider statement that performs the connect operation.</returns>
+    /// <returns>Returns the provider statement that performs the connect operation.</returns>
     /// <exception cref="StatementEmissionException">Thrown when the statement cannot be emitted.</exception>
     DataStatement EmitConnect<TStart, TEdge, TEnd>(IGraphModel model, TStart start, TEdge edge, TEnd end);
 
@@ -90,7 +90,7 @@ public interface IStatementEmitter
     /// <param name="model">The frozen graph model used to resolve metadata.</param>
     /// <param name="start">The start node of the relationship.</param>
     /// <param name="end">The end node of the relationship.</param>
-    /// <returns>The provider statement that performs the disconnect operation.</returns>
+    /// <returns>Returns the provider statement that performs the disconnect operation.</returns>
     /// <exception cref="StatementEmissionException">Thrown when the statement cannot be emitted.</exception>
     DataStatement EmitDisconnect<TStart, TEdge, TEnd>(IGraphModel model, TStart start, TEnd end);
 
@@ -100,7 +100,7 @@ public interface IStatementEmitter
     /// <typeparam name="T">The CLR type of the node to find.</typeparam>
     /// <param name="model">The frozen graph model used to resolve metadata.</param>
     /// <param name="key">The key value to look up.</param>
-    /// <returns>The provider statement that performs the lookup.</returns>
+    /// <returns>Returns the provider statement that performs the lookup.</returns>
     /// <exception cref="StatementEmissionException">Thrown when the statement cannot be emitted.</exception>
     DataStatement EmitFindById<T>(IGraphModel model, object key);
 
@@ -110,7 +110,7 @@ public interface IStatementEmitter
     /// <typeparam name="T">The CLR type of the node whose existence is being tested.</typeparam>
     /// <param name="model">The frozen graph model used to resolve metadata.</param>
     /// <param name="key">The key value to test.</param>
-    /// <returns>The provider statement that performs the existence check.</returns>
+    /// <returns>Returns the provider statement that performs the existence check.</returns>
     /// <exception cref="StatementEmissionException">Thrown when the statement cannot be emitted.</exception>
     DataStatement EmitExists<T>(IGraphModel model, object key);
 
@@ -119,7 +119,7 @@ public interface IStatementEmitter
     /// </summary>
     /// <typeparam name="T">The CLR type of the nodes to enumerate.</typeparam>
     /// <param name="model">The frozen graph model used to resolve metadata.</param>
-    /// <returns>The provider statement that enumerates the nodes.</returns>
+    /// <returns>Returns the provider statement that enumerates the nodes.</returns>
     /// <exception cref="StatementEmissionException">Thrown when the statement cannot be emitted.</exception>
     DataStatement EmitAsEnumerableNodes<T>(IGraphModel model);
 
@@ -128,7 +128,7 @@ public interface IStatementEmitter
     /// </summary>
     /// <typeparam name="T">The CLR type of the edges to enumerate.</typeparam>
     /// <param name="model">The frozen graph model used to resolve metadata.</param>
-    /// <returns>The provider statement that enumerates the edges.</returns>
+    /// <returns>Returns the provider statement that enumerates the edges.</returns>
     /// <exception cref="StatementEmissionException">Thrown when the statement cannot be emitted.</exception>
     DataStatement EmitAsEnumerableEdges<T>(IGraphModel model);
 
@@ -137,7 +137,7 @@ public interface IStatementEmitter
     /// </summary>
     /// <param name="model">The frozen graph model used to resolve metadata.</param>
     /// <param name="ast">The traversal AST produced by the fluent builder.</param>
-    /// <returns>The provider statement that executes the traversal.</returns>
+    /// <returns>Returns the provider statement that executes the traversal.</returns>
     /// <exception cref="StatementEmissionException">Thrown when the statement cannot be emitted.</exception>
     DataStatement EmitTraversal(IGraphModel model, TraversalAst ast);
 }

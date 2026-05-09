@@ -36,7 +36,7 @@ public interface IPatternNode<TNode> where TNode : class
     /// <typeparam name="TEdge">The CLR type of the edge. Must be a registered edge in the model.</typeparam>
     /// <typeparam name="TEnd">The CLR type of the end node. Must be a registered node in the model.</typeparam>
     /// <param name="alias">The alias used to reference the bound edge.</param>
-    /// <returns>An <see cref="IPatternRelationship{TStart, TEdge, TEnd}"/> stage.</returns>
+    /// <returns>Returns an <see cref="IPatternRelationship{TStart, TEdge, TEnd}"/> stage.</returns>
     IPatternRelationship<TNode, TEdge, TEnd> RelatedBy<TEdge, TEnd>(string alias)
         where TEdge : class
         where TEnd : class;
@@ -45,7 +45,7 @@ public interface IPatternNode<TNode> where TNode : class
     /// Filters the bound node by a property-level equality predicate. Only property-level predicates over the bound variable are supported; richer expressions must use the <see cref="IRawStatementExecutor"/> escape hatch.
     /// </summary>
     /// <param name="predicate">A property-level predicate over the bound node.</param>
-    /// <returns>The same node stage to allow further chaining.</returns>
+    /// <returns>Returns the same node stage to allow further chaining.</returns>
     IPatternNode<TNode> Where(Expression<Func<TNode, bool>> predicate);
 
     /// <summary>
@@ -53,7 +53,7 @@ public interface IPatternNode<TNode> where TNode : class
     /// </summary>
     /// <typeparam name="TResult">The CLR type of the returned variable.</typeparam>
     /// <param name="alias">The alias of a previously bound variable to return.</param>
-    /// <returns>An enumerable of materialized results. Construction is eager; enumeration is lazy.</returns>
+    /// <returns>Returns an enumerable of materialized results. Construction is eager; enumeration is lazy.</returns>
     /// <exception cref="TraversalTranslationException">Thrown when the traversal cannot be translated or initial execution fails.</exception>
     IEnumerable<TResult> Return<TResult>(string alias) where TResult : class;
 
@@ -63,7 +63,7 @@ public interface IPatternNode<TNode> where TNode : class
     /// <typeparam name="TResult">The CLR type of the returned variable.</typeparam>
     /// <param name="alias">The alias of a previously bound variable to return.</param>
     /// <param name="token">The token that may be used to cancel the enumeration.</param>
-    /// <returns>An asynchronous enumerable of materialized results.</returns>
+    /// <returns>Returns an asynchronous enumerable of materialized results.</returns>
     /// <exception cref="TraversalTranslationException">Thrown when the traversal cannot be translated or initial execution fails.</exception>
     IAsyncEnumerable<TResult> ReturnAsync<TResult>(string alias, CancellationToken token = default) where TResult : class;
 }

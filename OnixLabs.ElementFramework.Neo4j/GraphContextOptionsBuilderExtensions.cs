@@ -25,7 +25,7 @@ using Neo4j.Driver;
 namespace OnixLabs.ElementFramework;
 
 /// <summary>
-/// Provides extension methods for binding a graph context to a Neo4j endpoint.
+/// Represents the set of extension methods for binding a graph context to a Neo4j endpoint.
 /// </summary>
 public static class GraphContextOptionsBuilderExtensions
 {
@@ -38,9 +38,12 @@ public static class GraphContextOptionsBuilderExtensions
     /// <param name="builder">The <see cref="GraphContextOptionsBuilder"/> being configured.</param>
     /// <param name="connectionString">The Bolt connection URI (e.g. <c>bolt://localhost:7687</c> or <c>neo4j://...</c>).</param>
     /// <param name="authToken">The auth token to bind the driver with, or <see langword="null"/> for unauthenticated.</param>
-    /// <returns>The same <see cref="GraphContextOptionsBuilder"/> to allow further chaining.</returns>
+    /// <returns>Returns the same <see cref="GraphContextOptionsBuilder"/> to allow further chaining.</returns>
     /// <exception cref="ArgumentException">Thrown when <paramref name="connectionString"/> is null, empty, or whitespace.</exception>
-    public static GraphContextOptionsBuilder UseNeo4j(this GraphContextOptionsBuilder builder, string connectionString, IAuthToken? authToken = null)
+    public static GraphContextOptionsBuilder UseNeo4j(
+        this GraphContextOptionsBuilder builder,
+        string connectionString,
+        IAuthToken? authToken = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(connectionString);
         return builder.UseNeo4j(() => connectionString, authToken);
@@ -55,9 +58,12 @@ public static class GraphContextOptionsBuilderExtensions
     /// <param name="builder">The <see cref="GraphContextOptionsBuilder"/> being configured.</param>
     /// <param name="connectionStringFactory">A factory that returns the Bolt connection URI on demand. Invoked once on first <see cref="IDriver"/> resolution; the result is cached process-wide.</param>
     /// <param name="authToken">The auth token to bind the driver with, or <see langword="null"/> for unauthenticated.</param>
-    /// <returns>The same <see cref="GraphContextOptionsBuilder"/> to allow further chaining.</returns>
+    /// <returns>Returns the same <see cref="GraphContextOptionsBuilder"/> to allow further chaining.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="connectionStringFactory"/> is <see langword="null"/>.</exception>
-    public static GraphContextOptionsBuilder UseNeo4j(this GraphContextOptionsBuilder builder, Func<string> connectionStringFactory, IAuthToken? authToken = null)
+    public static GraphContextOptionsBuilder UseNeo4j(
+        this GraphContextOptionsBuilder builder,
+        Func<string> connectionStringFactory,
+        IAuthToken? authToken = null)
     {
         ArgumentNullException.ThrowIfNull(connectionStringFactory);
 

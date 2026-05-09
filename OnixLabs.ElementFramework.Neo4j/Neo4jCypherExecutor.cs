@@ -49,10 +49,22 @@ internal sealed class Neo4jCypherExecutor(Lazy<IDriver> driver, IGraphTransactio
     }
 
     /// <inheritdoc/>
-    public IAsyncEnumerable<IReadOnlyDictionary<string, object?>> ExecuteAsync(string statement, IReadOnlyDictionary<string, object?> parameters, CancellationToken token = default) =>
-        ExecuteAsyncCore(statement, parameters, token);
+    public IAsyncEnumerable<IReadOnlyDictionary<string, object?>> ExecuteAsync(
+        string statement,
+        IReadOnlyDictionary<string, object?> parameters,
+        CancellationToken token = default) => ExecuteAsyncCore(statement, parameters, token);
 
-    private async IAsyncEnumerable<IReadOnlyDictionary<string, object?>> ExecuteAsyncCore(string statement, IReadOnlyDictionary<string, object?> parameters, [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken token)
+    /// <summary>
+    /// Executes the supplied Cypher <paramref name="statement"/> and yields each materialized row.
+    /// </summary>
+    /// <param name="statement">The Cypher statement to execute.</param>
+    /// <param name="parameters">The parameter bindings for the statement.</param>
+    /// <param name="token">A <see cref="CancellationToken"/> that cancels the enumeration.</param>
+    /// <returns>Returns an asynchronous enumeration of result rows keyed by alias.</returns>
+    private async IAsyncEnumerable<IReadOnlyDictionary<string, object?>> ExecuteAsyncCore(
+        string statement,
+        IReadOnlyDictionary<string, object?> parameters,
+        [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken token)
     {
         IReadOnlyList<IReadOnlyDictionary<string, object?>> rows;
         try
@@ -69,7 +81,17 @@ internal sealed class Neo4jCypherExecutor(Lazy<IDriver> driver, IGraphTransactio
             yield return row;
     }
 
-    private async Task<IReadOnlyList<IReadOnlyDictionary<string, object?>>> RunAsync(string cypher, IReadOnlyDictionary<string, object?> parameters, CancellationToken token)
+    /// <summary>
+    /// Runs the supplied Cypher statement against the active transaction or a fresh auto-commit session and returns the materialized rows.
+    /// </summary>
+    /// <param name="cypher">The Cypher statement to execute.</param>
+    /// <param name="parameters">The parameter bindings for the statement.</param>
+    /// <param name="token">A <see cref="CancellationToken"/> that cancels the materialization.</param>
+    /// <returns>Returns a task that resolves to the materialized result rows keyed by alias.</returns>
+    private async Task<IReadOnlyList<IReadOnlyDictionary<string, object?>>> RunAsync(
+        string cypher,
+        IReadOnlyDictionary<string, object?> parameters,
+        CancellationToken token)
     {
         Dictionary<string, object?> driverParameters = parameters.ToDictionary(kv => kv.Key, kv => PropertySerializer.Serialize(kv.Value));
 
@@ -84,7 +106,15 @@ internal sealed class Neo4jCypherExecutor(Lazy<IDriver> driver, IGraphTransactio
         return await MaterializeAsync(autoCursor, token).ConfigureAwait(false);
     }
 
-    private static async Task<IReadOnlyList<IReadOnlyDictionary<string, object?>>> MaterializeAsync(IResultCursor cursor, CancellationToken token)
+    /// <summary>
+    /// Materializes every record yielded by <paramref name="cursor"/> into a list of alias-keyed dictionaries.
+    /// </summary>
+    /// <param name="cursor">The Neo4j result cursor to drain.</param>
+    /// <param name="token">A <see cref="CancellationToken"/> that cancels the materialization.</param>
+    /// <returns>Returns a task that resolves to the materialized rows.</returns>
+    private static async Task<IReadOnlyList<IReadOnlyDictionary<string, object?>>> MaterializeAsync(
+        IResultCursor cursor,
+        CancellationToken token)
     {
         List<IRecord> records = await cursor.ToListAsync(token).ConfigureAwait(false);
         List<IReadOnlyDictionary<string, object?>> rows = new(records.Count);

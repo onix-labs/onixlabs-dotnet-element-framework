@@ -29,18 +29,41 @@ namespace OnixLabs.ElementFramework;
 /// </summary>
 public sealed class GraphContextOptionsBuilder
 {
+    /// <summary>
+    /// The configured <see cref="IStatementEmitter"/>, or <see langword="null"/> when not yet supplied.
+    /// </summary>
     private IStatementEmitter? statementEmitter;
+
+    /// <summary>
+    /// The configured <see cref="IResultMaterializer"/>, or <see langword="null"/> when not yet supplied.
+    /// </summary>
     private IResultMaterializer? resultMaterializer;
+
+    /// <summary>
+    /// The configured <see cref="IRawStatementExecutor"/>, or <see langword="null"/> when not yet supplied.
+    /// </summary>
     private IRawStatementExecutor? rawStatementExecutor;
+
+    /// <summary>
+    /// The configured <see cref="IGraphTransactionOpener"/>, or <see langword="null"/> when not yet supplied.
+    /// </summary>
     private IGraphTransactionOpener? graphTransactionOpener;
+
+    /// <summary>
+    /// The configured <see cref="ITraversalTranslator"/>, or <see langword="null"/> when not yet supplied.
+    /// </summary>
     private ITraversalTranslator? traversalTranslator;
+
+    /// <summary>
+    /// The configured <see cref="ILoggerFactory"/>, or <see langword="null"/> when logging has not been opted in to.
+    /// </summary>
     private ILoggerFactory? loggerFactory;
 
     /// <summary>
     /// Sets the <see cref="IStatementEmitter"/> implementation that translates change-tracker operations into provider-specific statements.
     /// </summary>
     /// <param name="emitter">The provider's statement emitter.</param>
-    /// <returns>This <see cref="GraphContextOptionsBuilder"/> to allow further chaining.</returns>
+    /// <returns>Returns this <see cref="GraphContextOptionsBuilder"/> to allow further chaining.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="emitter"/> is <see langword="null"/>.</exception>
     public GraphContextOptionsBuilder UseStatementEmitter(IStatementEmitter emitter)
     {
@@ -53,7 +76,7 @@ public sealed class GraphContextOptionsBuilder
     /// Sets the <see cref="IResultMaterializer"/> implementation that projects executor result rows into CLR node and edge instances.
     /// </summary>
     /// <param name="materializer">The provider's result materializer.</param>
-    /// <returns>This <see cref="GraphContextOptionsBuilder"/> to allow further chaining.</returns>
+    /// <returns>Returns this <see cref="GraphContextOptionsBuilder"/> to allow further chaining.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="materializer"/> is <see langword="null"/>.</exception>
     public GraphContextOptionsBuilder UseResultMaterializer(IResultMaterializer materializer)
     {
@@ -66,7 +89,7 @@ public sealed class GraphContextOptionsBuilder
     /// Sets the <see cref="IRawStatementExecutor"/> implementation that runs raw provider statements against the underlying store.
     /// </summary>
     /// <param name="executor">The provider's raw statement executor.</param>
-    /// <returns>This <see cref="GraphContextOptionsBuilder"/> to allow further chaining.</returns>
+    /// <returns>Returns this <see cref="GraphContextOptionsBuilder"/> to allow further chaining.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="executor"/> is <see langword="null"/>.</exception>
     public GraphContextOptionsBuilder UseRawStatementExecutor(IRawStatementExecutor executor)
     {
@@ -79,7 +102,7 @@ public sealed class GraphContextOptionsBuilder
     /// Sets the <see cref="IGraphTransactionOpener"/> implementation that opens provider-specific transactions.
     /// </summary>
     /// <param name="opener">The provider's transaction opener.</param>
-    /// <returns>This <see cref="GraphContextOptionsBuilder"/> to allow further chaining.</returns>
+    /// <returns>Returns this <see cref="GraphContextOptionsBuilder"/> to allow further chaining.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="opener"/> is <see langword="null"/>.</exception>
     public GraphContextOptionsBuilder UseGraphTransactionOpener(IGraphTransactionOpener opener)
     {
@@ -92,7 +115,7 @@ public sealed class GraphContextOptionsBuilder
     /// Sets the <see cref="ITraversalTranslator"/> implementation that translates a <see cref="TraversalAst"/> into an executable provider query.
     /// </summary>
     /// <param name="translator">The provider's traversal translator.</param>
-    /// <returns>This <see cref="GraphContextOptionsBuilder"/> to allow further chaining.</returns>
+    /// <returns>Returns this <see cref="GraphContextOptionsBuilder"/> to allow further chaining.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="translator"/> is <see langword="null"/>.</exception>
     public GraphContextOptionsBuilder UseTraversalTranslator(ITraversalTranslator translator)
     {
@@ -105,7 +128,7 @@ public sealed class GraphContextOptionsBuilder
     /// Sets the <see cref="ILoggerFactory"/> used to produce loggers for diagnostic output. Optional; when not configured, logging is disabled.
     /// </summary>
     /// <param name="loggerFactory">The logger factory.</param>
-    /// <returns>This <see cref="GraphContextOptionsBuilder"/> to allow further chaining.</returns>
+    /// <returns>Returns this <see cref="GraphContextOptionsBuilder"/> to allow further chaining.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="loggerFactory"/> is <see langword="null"/>.</exception>
     public GraphContextOptionsBuilder UseLoggerFactory(ILoggerFactory loggerFactory)
     {
@@ -118,7 +141,7 @@ public sealed class GraphContextOptionsBuilder
     /// Builds an immutable <see cref="GraphContextOptions"/> containing the configured provider services and the supplied bootstrap delegate.
     /// </summary>
     /// <param name="createServices">The delegate that composes the per-context <see cref="GraphContextServices"/> bundle.</param>
-    /// <returns>An immutable <see cref="GraphContextOptions"/> carrying the configured provider implementations.</returns>
+    /// <returns>Returns an immutable <see cref="GraphContextOptions"/> carrying the configured provider implementations.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="createServices"/> is <see langword="null"/>.</exception>
     /// <exception cref="InvalidOperationException">Thrown when one or more required provider services have not been supplied.</exception>
     internal GraphContextOptions Build(Func<GraphContext, GraphContextOptions, GraphContextServices> createServices)
@@ -136,6 +159,14 @@ public sealed class GraphContextOptionsBuilder
         };
     }
 
+    /// <summary>
+    /// Returns <paramref name="value"/> when it is not <see langword="null"/>; otherwise throws an <see cref="InvalidOperationException"/> naming the missing configuration method.
+    /// </summary>
+    /// <typeparam name="T">The reference type of the configured service.</typeparam>
+    /// <param name="value">The configured service value.</param>
+    /// <param name="method">The name of the configuration method that should have supplied <paramref name="value"/>.</param>
+    /// <returns>Returns the non-<see langword="null"/> value of <paramref name="value"/>.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when <paramref name="value"/> is <see langword="null"/>.</exception>
     private static T Required<T>(T? value, string method) where T : class =>
         value ?? throw new InvalidOperationException($"Required service has not been configured. Call {method}(...) before building.");
 }

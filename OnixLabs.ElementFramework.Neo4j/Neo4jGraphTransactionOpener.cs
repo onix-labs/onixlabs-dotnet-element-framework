@@ -33,6 +33,9 @@ namespace OnixLabs.ElementFramework;
 /// <param name="driver">A lazy handle to the shared <see cref="IDriver"/> for the bound Neo4j endpoint. Resolution defers to the moment a transaction is first opened, allowing the connection string to be deferred past <c>AddGraphContext</c> registration time.</param>
 internal sealed class Neo4jGraphTransactionOpener(Lazy<IDriver> driver) : IGraphTransactionOpener
 {
+    /// <summary>
+    /// The currently-active ambient transaction for this opener, or <see langword="null"/> when none is open.
+    /// </summary>
     private Neo4jGraphTransaction? active;
 
     /// <inheritdoc/>
@@ -45,8 +48,18 @@ internal sealed class Neo4jGraphTransactionOpener(Lazy<IDriver> driver) : IGraph
     public async Task<IGraphTransaction> OpenAsync(CancellationToken token = default) =>
         await OpenInternalAsync(token).ConfigureAwait(false);
 
+    /// <summary>
+    /// Clears the ambient transaction slot so that <see cref="Open"/> can be invoked again. Called by <see cref="Neo4jGraphTransaction"/> on terminal.
+    /// </summary>
     internal void ClearActive() => active = null;
 
+    /// <summary>
+    /// Opens a new <see cref="Neo4jGraphTransaction"/> against the bound driver and stores it as the ambient transaction.
+    /// </summary>
+    /// <param name="token">A <see cref="CancellationToken"/> that cancels the begin-transaction call.</param>
+    /// <returns>Returns a task that resolves to the newly-opened <see cref="Neo4jGraphTransaction"/>.</returns>
+    /// <exception cref="GraphTransactionAlreadyActiveException">Thrown when an ambient transaction is already active for this opener.</exception>
+    /// <exception cref="GraphTransactionException">Thrown when the underlying session or transaction cannot be opened.</exception>
     private async Task<Neo4jGraphTransaction> OpenInternalAsync(CancellationToken token)
     {
         if (active is not null)

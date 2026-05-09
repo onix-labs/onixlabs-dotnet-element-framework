@@ -56,7 +56,8 @@ internal sealed class NodeSet<T>(
     public async IAsyncEnumerable<T> AsAsyncEnumerable([EnumeratorCancellation] CancellationToken token = default)
     {
         DataStatement statement = emitter.EmitAsEnumerableNodes<T>(model);
-        IAsyncEnumerable<IReadOnlyDictionary<string, object?>> rows = executor.ExecuteAsync(statement.Statement, statement.Parameters, token);
+        IAsyncEnumerable<IReadOnlyDictionary<string, object?>> rows =
+            executor.ExecuteAsync(statement.Statement, statement.Parameters, token);
         await foreach (IReadOnlyDictionary<string, object?> row in rows.ConfigureAwait(false))
             yield return materializer.MaterializeNode<T>(model, row, "n");
     }
@@ -73,7 +74,8 @@ internal sealed class NodeSet<T>(
     public async Task<bool> ExistsAsync(object id, CancellationToken token = default)
     {
         DataStatement statement = emitter.EmitExists<T>(model, id);
-        IAsyncEnumerable<IReadOnlyDictionary<string, object?>> rows = executor.ExecuteAsync(statement.Statement, statement.Parameters, token);
+        IAsyncEnumerable<IReadOnlyDictionary<string, object?>> rows =
+            executor.ExecuteAsync(statement.Statement, statement.Parameters, token);
         await foreach (IReadOnlyDictionary<string, object?> row in rows.ConfigureAwait(false))
             return row["count"] is long and > 0;
         return false;
@@ -101,7 +103,8 @@ internal sealed class NodeSet<T>(
         if (tracked is not null) return tracked;
 
         DataStatement statement = emitter.EmitFindById<T>(model, id);
-        IAsyncEnumerable<IReadOnlyDictionary<string, object?>> rows = executor.ExecuteAsync(statement.Statement, statement.Parameters, token);
+        IAsyncEnumerable<IReadOnlyDictionary<string, object?>> rows =
+            executor.ExecuteAsync(statement.Statement, statement.Parameters, token);
         await foreach (IReadOnlyDictionary<string, object?> row in rows.ConfigureAwait(false))
         {
             T instance = materializer.MaterializeNode<T>(model, row, "n");

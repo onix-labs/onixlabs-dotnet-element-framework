@@ -72,6 +72,11 @@ internal sealed class PatternNode<TNode>(TraversalState state, string alias) : I
         return state.Translator.TranslateAsync<TResult>(state.Model, ast, token);
     }
 
+    /// <summary>
+    /// Snapshots the accumulated traversal state into an immutable <see cref="TraversalAst"/> bound to the supplied return alias.
+    /// </summary>
+    /// <param name="returnAlias">The alias to project in the resulting AST.</param>
+    /// <returns>Returns an immutable <see cref="TraversalAst"/> representing the accumulated traversal.</returns>
     private TraversalAst BuildAst(string returnAlias) =>
         new(state.Kind, [..state.Segments], [..state.Predicates], returnAlias);
 }

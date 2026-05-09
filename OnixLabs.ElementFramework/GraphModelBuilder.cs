@@ -27,7 +27,14 @@ namespace OnixLabs.ElementFramework;
 /// </summary>
 internal sealed class GraphModelBuilder : IGraphModelBuilder
 {
+    /// <summary>
+    /// The accumulated node metadata builders keyed by node CLR type.
+    /// </summary>
     private readonly Dictionary<Type, INodeMetadataBuilder> nodeBuilders = [];
+
+    /// <summary>
+    /// The accumulated relationship metadata builders keyed by edge CLR type.
+    /// </summary>
     private readonly Dictionary<Type, IRelationshipMetadataBuilder> relationshipBuilders = [];
 
     /// <inheritdoc/>
@@ -79,7 +86,7 @@ internal sealed class GraphModelBuilder : IGraphModelBuilder
     /// <summary>
     /// Materializes the accumulated builder configuration into a frozen, validated <see cref="GraphModel"/>.
     /// </summary>
-    /// <returns>The frozen <see cref="GraphModel"/> built from the registered nodes and relationships.</returns>
+    /// <returns>Returns the frozen <see cref="GraphModel"/> built from the registered nodes and relationships.</returns>
     /// <exception cref="ModelConfigurationException">Thrown when validation of the resulting model fails.</exception>
     public GraphModel Build()
     {

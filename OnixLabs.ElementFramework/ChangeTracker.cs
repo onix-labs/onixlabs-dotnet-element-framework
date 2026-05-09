@@ -38,7 +38,14 @@ internal sealed class ChangeTracker(
     IRawStatementExecutor executor,
     IGraphTransactionOpener opener) : IChangeTracker
 {
+    /// <summary>
+    /// The identity map of tracked instances keyed by CLR type and key value.
+    /// </summary>
     private readonly Dictionary<(Type Type, object Key), object> identityMap = [];
+
+    /// <summary>
+    /// The ordered list of pending statement-emission delegates awaiting the next flush.
+    /// </summary>
     private readonly List<Func<IStatementEmitter, IGraphModel, DataStatement>> pending = [];
 
     /// <inheritdoc/>
@@ -185,6 +192,14 @@ internal sealed class ChangeTracker(
         pending.Clear();
     }
 
+    /// <summary>
+    /// Resolves the key metadata and key value for the supplied node, then invokes <paramref name="stage"/> with the resolved type, key, and instance.
+    /// </summary>
+    /// <typeparam name="T">The CLR type of the node being staged.</typeparam>
+    /// <param name="node">The node instance to stage.</param>
+    /// <param name="stage">The action that performs the actual identity-map and pending-list update.</param>
+    /// <exception cref="ModelConfigurationException">Thrown when the node type has no key configured.</exception>
+    /// <exception cref="GraphContextException">Thrown when the node has a <see langword="null"/> key value.</exception>
     private void StageNode<T>(T node, Action<Type, object, object> stage) where T : class
     {
         INodeMetadata metadata = model.GetNode(typeof(T));
@@ -200,6 +215,11 @@ internal sealed class ChangeTracker(
         stage(typeof(T), key, node);
     }
 
+    /// <summary>
+    /// Executes the supplied pending operations synchronously and returns the number of statements executed.
+    /// </summary>
+    /// <param name="ops">The pending operations to execute.</param>
+    /// <returns>Returns the number of statements executed.</returns>
     private int ExecuteAll(IReadOnlyList<Func<IStatementEmitter, IGraphModel, DataStatement>> ops)
     {
         int count = 0;
@@ -212,13 +232,20 @@ internal sealed class ChangeTracker(
         return count;
     }
 
+    /// <summary>
+    /// Executes the supplied pending operations asynchronously and returns the number of statements executed.
+    /// </summary>
+    /// <param name="ops">The pending operations to execute.</param>
+    /// <param name="token">The <see cref="CancellationToken"/> used to cancel the operation.</param>
+    /// <returns>Returns a task that resolves to the number of statements executed.</returns>
     private async Task<int> ExecuteAllAsync(IReadOnlyList<Func<IStatementEmitter, IGraphModel, DataStatement>> ops, CancellationToken token)
     {
         int count = 0;
         foreach (Func<IStatementEmitter, IGraphModel, DataStatement> emit in ops)
         {
             DataStatement statement = emit(emitter, model);
-            IAsyncEnumerable<IReadOnlyDictionary<string, object?>> result = executor.ExecuteAsync(statement.Statement, statement.Parameters, token);
+            IAsyncEnumerable<IReadOnlyDictionary<string, object?>> result =
+                executor.ExecuteAsync(statement.Statement, statement.Parameters, token);
             // Drive enumeration so each staged async statement actually executes; row content is discarded.
             await foreach (IReadOnlyDictionary<string, object?> _ in result.ConfigureAwait(false))
             {

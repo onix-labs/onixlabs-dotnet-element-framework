@@ -30,18 +30,18 @@ public interface IGraphTraversal
     /// <summary>
     /// Begins a match pattern.
     /// </summary>
-    /// <returns>A new <see cref="IPatternStart"/> that the caller can extend with the pattern shape.</returns>
+    /// <returns>Returns a new <see cref="IPatternStart"/> that the caller can extend with the pattern shape.</returns>
     IPatternStart Match();
 
     /// <summary>
     /// Begins a merge pattern — match if the pattern exists, create otherwise.
     /// </summary>
-    /// <returns>A new <see cref="IPatternStart"/> that the caller can extend with the pattern shape.</returns>
+    /// <returns>Returns a new <see cref="IPatternStart"/> that the caller can extend with the pattern shape.</returns>
     IPatternStart Merge();
 
     /// <summary>
     /// Begins a create pattern.
     /// </summary>
-    /// <returns>A new <see cref="IPatternStart"/> that the caller can extend with the pattern shape.</returns>
+    /// <returns>Returns a new <see cref="IPatternStart"/> that the caller can extend with the pattern shape.</returns>
     IPatternStart Create();
 }

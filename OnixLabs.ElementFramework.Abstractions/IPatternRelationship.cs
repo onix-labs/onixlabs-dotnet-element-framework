@@ -36,18 +36,18 @@ public interface IPatternRelationship<TStart, TEdge, TEnd>
     /// <summary>
     /// Pins the relationship as outgoing from the start node to the end node.
     /// </summary>
-    /// <returns>An <see cref="IPatternRelationshipDirected{TStart, TEdge, TEnd}"/> stage with the direction pinned.</returns>
+    /// <returns>Returns an <see cref="IPatternRelationshipDirected{TStart, TEdge, TEnd}"/> stage with the direction pinned.</returns>
     IPatternRelationshipDirected<TStart, TEdge, TEnd> Outgoing();
 
     /// <summary>
     /// Pins the relationship as incoming to the start node from the end node.
     /// </summary>
-    /// <returns>An <see cref="IPatternRelationshipDirected{TStart, TEdge, TEnd}"/> stage with the direction pinned.</returns>
+    /// <returns>Returns an <see cref="IPatternRelationshipDirected{TStart, TEdge, TEnd}"/> stage with the direction pinned.</returns>
     IPatternRelationshipDirected<TStart, TEdge, TEnd> Incoming();
 
     /// <summary>
     /// Leaves the relationship undirected, matching both incoming and outgoing edges.
     /// </summary>
-    /// <returns>An <see cref="IPatternRelationshipDirected{TStart, TEdge, TEnd}"/> stage with the direction pinned as either.</returns>
+    /// <returns>Returns an <see cref="IPatternRelationshipDirected{TStart, TEdge, TEnd}"/> stage with the direction pinned as either.</returns>
     IPatternRelationshipDirected<TStart, TEdge, TEnd> Either();
 }

@@ -40,7 +40,7 @@ internal static class PredicateTranslator
     /// <typeparam name="TNode">The bound CLR type the lambda parameter refers to.</typeparam>
     /// <param name="alias">The alias the predicate is scoped to (the alias of the bound segment that <c>Where</c> was invoked on).</param>
     /// <param name="predicate">The lambda predicate to translate.</param>
-    /// <returns>The translated predicate ready for accumulation in <see cref="TraversalState.Predicates"/>.</returns>
+    /// <returns>Returns the translated predicate ready for accumulation in <see cref="TraversalState.Predicates"/>.</returns>
     /// <exception cref="NotSupportedException">Thrown when the expression shape is anything other than <c>p =&gt; p.Property == constant</c>.</exception>
     public static TraversalPredicate Translate<TNode>(string alias, Expression<Func<TNode, bool>> predicate)
     {
@@ -70,9 +70,20 @@ internal static class PredicateTranslator
         return new TraversalPredicate(alias, property.Name, value);
     }
 
-    private static bool TryReadParameterPropertyAccess(Expression expression, ParameterExpression parameter, [NotNullWhen(true)] out PropertyInfo? property)
+    /// <summary>
+    /// Attempts to read a property-access expression rooted on the supplied lambda parameter.
+    /// </summary>
+    /// <param name="expression">The candidate expression to inspect.</param>
+    /// <param name="parameter">The lambda parameter the property access must be rooted on.</param>
+    /// <param name="property">When this method returns <see langword="true"/>, contains the resolved <see cref="PropertyInfo"/>.</param>
+    /// <returns>Returns <see langword="true"/> when the expression is a property access on <paramref name="parameter"/>; otherwise, <see langword="false"/>.</returns>
+    private static bool TryReadParameterPropertyAccess(
+        Expression expression,
+        ParameterExpression parameter,
+        [NotNullWhen(true)] out PropertyInfo? property)
     {
-        if (expression is MemberExpression { Member: PropertyInfo info, Expression: ParameterExpression candidate } && candidate == parameter)
+        if (expression is MemberExpression { Member: PropertyInfo info, Expression: ParameterExpression candidate }
+            && candidate == parameter)
         {
             property = info;
             return true;
@@ -81,6 +92,10 @@ internal static class PredicateTranslator
         return false;
     }
 
+    /// <summary>
+    /// Creates a <see cref="NotSupportedException"/> describing the supported predicate shape and pointing at the raw-statement escape hatch.
+    /// </summary>
+    /// <returns>Returns a <see cref="NotSupportedException"/> with a guidance message.</returns>
     private static NotSupportedException NotSupported() =>
         new("Only property-equality predicates over the bound variable are supported (e.g. x => x.Name == \"Alice\"). " +
             "Use IRawStatementExecutor.Execute(...) for richer expressions.");

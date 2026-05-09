@@ -34,7 +34,7 @@ public interface INodeBuilder<T> where T : class
     /// Overrides the label that the underlying store uses for this node type.
     /// </summary>
     /// <param name="label">The label to apply.</param>
-    /// <returns>This <see cref="INodeBuilder{T}"/> to allow further chaining.</returns>
+    /// <returns>Returns this <see cref="INodeBuilder{T}"/> to allow further chaining.</returns>
     INodeBuilder<T> HasLabel(string label);
 
     /// <summary>
@@ -42,7 +42,7 @@ public interface INodeBuilder<T> where T : class
     /// </summary>
     /// <typeparam name="TKey">The CLR type of the key property.</typeparam>
     /// <param name="selector">An expression selecting the key property.</param>
-    /// <returns>This <see cref="INodeBuilder{T}"/> to allow further chaining.</returns>
+    /// <returns>Returns this <see cref="INodeBuilder{T}"/> to allow further chaining.</returns>
     INodeBuilder<T> HasKey<TKey>(Expression<Func<T, TKey>> selector);
 
     /// <summary>
@@ -51,7 +51,7 @@ public interface INodeBuilder<T> where T : class
     /// <typeparam name="TProperty">The CLR type of the property.</typeparam>
     /// <param name="selector">An expression selecting the property.</param>
     /// <param name="name">The property name to apply, or <see langword="null"/> to use the CLR property name.</param>
-    /// <returns>This <see cref="INodeBuilder{T}"/> to allow further chaining.</returns>
+    /// <returns>Returns this <see cref="INodeBuilder{T}"/> to allow further chaining.</returns>
     INodeBuilder<T> Property<TProperty>(Expression<Func<T, TProperty>> selector, string? name = null);
 
     /// <summary>
@@ -59,6 +59,6 @@ public interface INodeBuilder<T> where T : class
     /// </summary>
     /// <typeparam name="TProperty">The CLR type of the property.</typeparam>
     /// <param name="selector">An expression selecting the property to exclude.</param>
-    /// <returns>This <see cref="INodeBuilder{T}"/> to allow further chaining.</returns>
+    /// <returns>Returns this <see cref="INodeBuilder{T}"/> to allow further chaining.</returns>
     INodeBuilder<T> Ignore<TProperty>(Expression<Func<T, TProperty>> selector);
 }

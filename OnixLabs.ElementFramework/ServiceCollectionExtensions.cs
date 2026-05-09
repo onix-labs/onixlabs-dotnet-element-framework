@@ -40,7 +40,7 @@ public static class ServiceCollectionExtensions
     /// <param name="configure">An optional action that configures the <see cref="GraphContextOptionsBuilder"/> for the context.</param>
     /// <param name="serviceKey">An optional key used to differentiate between multiple registrations of the same context type.</param>
     /// <param name="lifetime">The lifetime with which to register the context.</param>
-    /// <returns>The supplied <paramref name="services"/> to allow further chaining.</returns>
+    /// <returns>Returns the supplied <paramref name="services"/> to allow further chaining.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="services"/> is <see langword="null"/>.</exception>
     /// <exception cref="InvalidOperationException">Thrown when one or more required provider services have not been supplied via <paramref name="configure"/>.</exception>
     public static IServiceCollection AddGraphContext<TContext>(
@@ -57,17 +57,29 @@ public static class ServiceCollectionExtensions
 
         ServiceDescriptor descriptor = serviceKey is null
             ? new ServiceDescriptor(typeof(TContext), sp => ActivatorUtilities.CreateInstance<TContext>(sp, options), lifetime)
-            : new ServiceDescriptor(typeof(TContext), serviceKey, (sp, _) => ActivatorUtilities.CreateInstance<TContext>(sp, options), lifetime);
+            : new ServiceDescriptor(
+                typeof(TContext),
+                serviceKey,
+                (sp, _) => ActivatorUtilities.CreateInstance<TContext>(sp, options),
+                lifetime);
 
         services.Add(descriptor);
         return services;
     }
 
+    /// <summary>
+    /// Composes the per-context <see cref="GraphContextServices"/> bundle from the resolved model and configured provider services.
+    /// </summary>
+    /// <param name="context">The <see cref="GraphContext"/> being initialised.</param>
+    /// <param name="options">The configured <see cref="GraphContextOptions"/> carrying the provider services.</param>
+    /// <returns>Returns the composed <see cref="GraphContextServices"/> bundle for the supplied context.</returns>
     private static GraphContextServices BuildGraphContextServices(GraphContext context, GraphContextOptions options)
     {
         IGraphModel model = ModelSource.ModelFor(context);
-        ChangeTracker changeTracker = new(model, options.StatementEmitter, options.RawStatementExecutor, options.GraphTransactionOpener);
-        GraphSetFactory setFactory = new(model, changeTracker, options.StatementEmitter, options.RawStatementExecutor, options.ResultMaterializer);
+        ChangeTracker changeTracker = new(
+            model, options.StatementEmitter, options.RawStatementExecutor, options.GraphTransactionOpener);
+        GraphSetFactory setFactory = new(
+            model, changeTracker, options.StatementEmitter, options.RawStatementExecutor, options.ResultMaterializer);
         GraphTransactionFactory transactionFactory = new(options.GraphTransactionOpener, changeTracker);
         GraphTraversal traversal = new(model, options.TraversalTranslator);
         return new GraphContextServices(changeTracker, setFactory, transactionFactory, traversal, options.RawStatementExecutor);

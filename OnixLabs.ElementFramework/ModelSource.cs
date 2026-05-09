@@ -29,17 +29,25 @@ namespace OnixLabs.ElementFramework;
 /// </summary>
 internal static class ModelSource
 {
+    /// <summary>
+    /// The process-wide cache of frozen <see cref="GraphModel"/> instances keyed by <see cref="GraphContext"/> CLR type.
+    /// </summary>
     private static readonly ConcurrentDictionary<Type, Lazy<GraphModel>> Models = [];
 
     /// <summary>
     /// Returns the frozen <see cref="GraphModel"/> for the supplied context, building and caching it on first call.
     /// </summary>
     /// <param name="context">The context whose model is being requested.</param>
-    /// <returns>The frozen <see cref="GraphModel"/> for the supplied context's CLR type.</returns>
+    /// <returns>Returns the frozen <see cref="GraphModel"/> for the supplied context's CLR type.</returns>
     /// <exception cref="ModelConfigurationException">Thrown when the model fails validation on first build.</exception>
     public static GraphModel ModelFor(GraphContext context) => Models
         .GetOrAdd(context.GetType(), static (_, ctx) => new Lazy<GraphModel>(() => Build(ctx)), context).Value;
 
+    /// <summary>
+    /// Builds the frozen <see cref="GraphModel"/> for the supplied context by invoking <see cref="GraphContext.OnModelCreating"/> on a fresh builder.
+    /// </summary>
+    /// <param name="context">The context whose model is being built.</param>
+    /// <returns>Returns the frozen <see cref="GraphModel"/> built from the context's configuration.</returns>
     private static GraphModel Build(GraphContext context)
     {
         GraphModelBuilder builder = new();

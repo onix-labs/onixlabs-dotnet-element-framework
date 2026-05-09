@@ -23,13 +23,16 @@
 namespace OnixLabs.ElementFramework;
 
 /// <summary>
-/// Provides Cypher identifier escaping that wraps an identifier in backticks when it is not a valid bare identifier or collides with a Cypher 5 reserved word.
+/// Represents a helper that escapes Cypher identifiers, wrapping them in backticks when they are not valid bare identifiers or collide with a Cypher 5 reserved word.
 /// </summary>
 /// <remarks>
 /// Reserved-word list mirrors Neo4j's published Cypher 5 reserved-word reference. Comparison is case-insensitive because Cypher reserved words are case-insensitive in the parser. Backticks inside an identifier are escaped by doubling per the Cypher quoting rules.
 /// </remarks>
 internal static class CypherIdentifier
 {
+    /// <summary>
+    /// The set of Cypher 5 reserved words, compared case-insensitively.
+    /// </summary>
     private static readonly HashSet<string> ReservedWords = new(StringComparer.OrdinalIgnoreCase)
     {
         "ALL", "AND", "ANY", "AS", "ASC", "ASCENDING", "BY", "CALL", "CASE", "CONSTRAINT", "CONTAINS",
@@ -45,7 +48,7 @@ internal static class CypherIdentifier
     /// Returns the supplied identifier formatted for safe inclusion in a Cypher query. Bare alphanumeric identifiers that are not reserved words are returned unchanged; everything else is wrapped in backticks (and any embedded backtick is doubled).
     /// </summary>
     /// <param name="identifier">The CLR-side label or property name to escape.</param>
-    /// <returns>The Cypher-safe identifier text.</returns>
+    /// <returns>Returns the Cypher-safe identifier text.</returns>
     /// <exception cref="ArgumentException">Thrown when <paramref name="identifier"/> is null, empty, or whitespace.</exception>
     public static string Escape(string identifier)
     {
@@ -55,6 +58,11 @@ internal static class CypherIdentifier
             : $"`{identifier.Replace("`", "``")}`";
     }
 
+    /// <summary>
+    /// Determines whether the supplied <paramref name="identifier"/> is a bare Cypher identifier (ASCII letter or underscore, followed by ASCII letters, digits, or underscores).
+    /// </summary>
+    /// <param name="identifier">The identifier to inspect.</param>
+    /// <returns>Returns <see langword="true"/> when <paramref name="identifier"/> is a bare identifier; otherwise, <see langword="false"/>.</returns>
     private static bool IsBareIdentifier(string identifier)
     {
         char first = identifier[0];

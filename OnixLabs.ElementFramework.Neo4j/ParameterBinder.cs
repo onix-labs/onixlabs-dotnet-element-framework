@@ -30,7 +30,14 @@ namespace OnixLabs.ElementFramework;
 /// </remarks>
 internal sealed class ParameterBinder
 {
+    /// <summary>
+    /// The accumulated parameter bindings keyed by their final, collision-resolved name.
+    /// </summary>
     private readonly Dictionary<string, object?> parameters = [];
+
+    /// <summary>
+    /// Tracks the highest assigned numeric suffix for each preferred parameter name to keep collision resolution deterministic.
+    /// </summary>
     private readonly Dictionary<string, int> nameCounts = [];
 
     /// <summary>
@@ -38,7 +45,7 @@ internal sealed class ParameterBinder
     /// </summary>
     /// <param name="preferredName">The starting parameter name (typically the property name, no <c>$</c>).</param>
     /// <param name="value">The bound value, already serialized by <see cref="PropertySerializer"/> if needed.</param>
-    /// <returns>The Cypher parameter token, e.g. <c>$Body</c> or <c>$Body_1</c>.</returns>
+    /// <returns>Returns the Cypher parameter token, e.g. <c>$Body</c> or <c>$Body_1</c>.</returns>
     /// <exception cref="ArgumentException">Thrown when <paramref name="preferredName"/> is null, empty, or whitespace.</exception>
     public string Bind(string preferredName, object? value)
     {
@@ -61,6 +68,6 @@ internal sealed class ParameterBinder
     /// <summary>
     /// Snapshots the accumulated parameter bindings as the read-only dictionary that <see cref="DataStatement.Parameters"/> exposes.
     /// </summary>
-    /// <returns>The accumulated parameter bindings.</returns>
+    /// <returns>Returns the accumulated parameter bindings.</returns>
     public IReadOnlyDictionary<string, object?> ToParameters() => parameters;
 }

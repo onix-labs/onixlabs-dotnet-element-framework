@@ -32,6 +32,6 @@ public interface IPatternStart
     /// </summary>
     /// <typeparam name="TNode">The CLR type of the node. Must be a registered node in the model.</typeparam>
     /// <param name="alias">The alias used to reference the bound node in subsequent stages and at return time.</param>
-    /// <returns>An <see cref="IPatternNode{TNode}"/> stage scoped to the bound alias.</returns>
+    /// <returns>Returns an <see cref="IPatternNode{TNode}"/> stage scoped to the bound alias.</returns>
     IPatternNode<TNode> Node<TNode>(string alias) where TNode : class;
 }

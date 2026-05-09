@@ -39,7 +39,7 @@ public interface IRelationshipBuilder<TStart, TEdge, TEnd>
     /// Overrides the relationship type that the underlying store uses for this relationship.
     /// </summary>
     /// <param name="type">The relationship type to apply.</param>
-    /// <returns>This <see cref="IRelationshipBuilder{TStart, TEdge, TEnd}"/> to allow further chaining.</returns>
+    /// <returns>Returns this <see cref="IRelationshipBuilder{TStart, TEdge, TEnd}"/> to allow further chaining.</returns>
     IRelationshipBuilder<TStart, TEdge, TEnd> HasType(string type);
 
     /// <summary>
@@ -48,7 +48,7 @@ public interface IRelationshipBuilder<TStart, TEdge, TEnd>
     /// <typeparam name="TProperty">The CLR type of the property.</typeparam>
     /// <param name="selector">An expression selecting the property.</param>
     /// <param name="name">The property name to apply, or <see langword="null"/> to use the CLR property name.</param>
-    /// <returns>This <see cref="IRelationshipBuilder{TStart, TEdge, TEnd}"/> to allow further chaining.</returns>
+    /// <returns>Returns this <see cref="IRelationshipBuilder{TStart, TEdge, TEnd}"/> to allow further chaining.</returns>
     IRelationshipBuilder<TStart, TEdge, TEnd> Property<TProperty>(Expression<Func<TEdge, TProperty>> selector, string? name = null);
 
     /// <summary>
@@ -56,6 +56,6 @@ public interface IRelationshipBuilder<TStart, TEdge, TEnd>
     /// </summary>
     /// <typeparam name="TProperty">The CLR type of the property.</typeparam>
     /// <param name="selector">An expression selecting the property to exclude.</param>
-    /// <returns>This <see cref="IRelationshipBuilder{TStart, TEdge, TEnd}"/> to allow further chaining.</returns>
+    /// <returns>Returns this <see cref="IRelationshipBuilder{TStart, TEdge, TEnd}"/> to allow further chaining.</returns>
     IRelationshipBuilder<TStart, TEdge, TEnd> Ignore<TProperty>(Expression<Func<TEdge, TProperty>> selector);
 }

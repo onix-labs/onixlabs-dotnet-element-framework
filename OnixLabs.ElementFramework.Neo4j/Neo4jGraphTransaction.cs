@@ -32,9 +32,24 @@ namespace OnixLabs.ElementFramework;
 /// </remarks>
 internal sealed class Neo4jGraphTransaction : IGraphTransaction
 {
+    /// <summary>
+    /// The Neo4j async session that owns the underlying <see cref="IAsyncTransaction"/>.
+    /// </summary>
     private readonly IAsyncSession session;
+
+    /// <summary>
+    /// The Neo4j async transaction that ambient queries are routed through.
+    /// </summary>
     private readonly IAsyncTransaction transaction;
+
+    /// <summary>
+    /// The opener that produced this transaction, notified when the transaction terminates.
+    /// </summary>
     private readonly Neo4jGraphTransactionOpener opener;
+
+    /// <summary>
+    /// Indicates whether the transaction has been committed, rolled back, or disposed.
+    /// </summary>
     private bool closed;
 
     /// <summary>
@@ -120,6 +135,10 @@ internal sealed class Neo4jGraphTransaction : IGraphTransaction
         await CloseAsync().ConfigureAwait(false);
     }
 
+    /// <summary>
+    /// Closes the underlying session and clears the opener's ambient slot exactly once.
+    /// </summary>
+    /// <returns>Returns a <see cref="ValueTask"/> that completes once the session has been closed and the ambient slot cleared.</returns>
     private async ValueTask CloseAsync()
     {
         if (closed) return;

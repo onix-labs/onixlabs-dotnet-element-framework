@@ -31,9 +31,24 @@ namespace OnixLabs.ElementFramework;
 /// <typeparam name="T">The CLR type being configured as a node.</typeparam>
 internal sealed class NodeBuilder<T> : INodeBuilder<T>, INodeMetadataBuilder where T : class
 {
+    /// <summary>
+    /// The set of property name overrides keyed by <see cref="PropertyInfo"/>.
+    /// </summary>
     private readonly Dictionary<PropertyInfo, string> propertyNameOverrides = [];
+
+    /// <summary>
+    /// The set of properties explicitly excluded from the produced <see cref="NodeMetadata"/>.
+    /// </summary>
     private readonly HashSet<PropertyInfo> ignoredProperties = [];
+
+    /// <summary>
+    /// The configured node label, defaulting to the CLR type name.
+    /// </summary>
     private string label = typeof(T).Name;
+
+    /// <summary>
+    /// The configured key property, or <see langword="null"/> when no key has been designated.
+    /// </summary>
     private PropertyInfo? keyProperty;
 
     /// <summary>
@@ -93,6 +108,13 @@ internal sealed class NodeBuilder<T> : INodeBuilder<T>, INodeMetadataBuilder whe
         return new NodeMetadata(typeof(T), label, keyMetadata, properties);
     }
 
+    /// <summary>
+    /// Resolves the <see cref="PropertyInfo"/> referenced by the supplied member-access expression.
+    /// </summary>
+    /// <typeparam name="TProperty">The CLR type of the selected property.</typeparam>
+    /// <param name="selector">The lambda expression selecting the property.</param>
+    /// <returns>Returns the <see cref="PropertyInfo"/> referenced by <paramref name="selector"/>.</returns>
+    /// <exception cref="ArgumentException">Thrown when <paramref name="selector"/> is not a property-access expression.</exception>
     private static PropertyInfo ResolveProperty<TProperty>(Expression<Func<T, TProperty>> selector)
     {
         return selector.Body switch

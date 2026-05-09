@@ -25,7 +25,7 @@ using Neo4j.Driver;
 namespace OnixLabs.ElementFramework;
 
 /// <summary>
-/// Provides serialization of CLR property values into Bolt-friendly representations that the Neo4j driver accepts as bound parameter values.
+/// Represents a helper that serializes CLR property values into Bolt-friendly representations the Neo4j driver accepts as bound parameter values.
 /// </summary>
 /// <remarks>
 /// Conversions covered in v1: <see cref="Guid"/> to <see cref="string"/> (canonical hyphenated form), <see cref="DateTimeOffset"/> to <see cref="ZonedDateTime"/> (Bolt's offset-aware temporal), <see cref="Enum"/> to its member name. Anything else (primitives, <see cref="string"/>, <see cref="DateTime"/>, byte arrays, lists, maps) is returned unchanged and the driver's PackStream encoder handles it.
@@ -36,7 +36,7 @@ internal static class PropertySerializer
     /// Serializes a CLR property value into a form the Neo4j driver can bind.
     /// </summary>
     /// <param name="value">The CLR value, possibly null.</param>
-    /// <returns>The Bolt-friendly representation, or <see langword="null"/> when the input was null.</returns>
+    /// <returns>Returns the Bolt-friendly representation, or <see langword="null"/> when the input was <see langword="null"/>.</returns>
     public static object? Serialize(object? value) => value switch
     {
         null => null,

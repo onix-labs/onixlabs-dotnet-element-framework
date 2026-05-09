@@ -31,13 +31,13 @@ internal interface IGraphSetFactory
     /// Returns the typed-set accessor for nodes of the specified type, creating and caching it on the first call.
     /// </summary>
     /// <typeparam name="T">The node type. Must be a registered node in the model.</typeparam>
-    /// <returns>An <see cref="INodeSet{T}"/> scoped to the node type.</returns>
+    /// <returns>Returns an <see cref="INodeSet{T}"/> scoped to the node type.</returns>
     INodeSet<T> GetNodesOfType<T>() where T : class;
 
     /// <summary>
     /// Returns the typed-set accessor for edges of the specified type, creating and caching it on the first call.
     /// </summary>
     /// <typeparam name="T">The edge type. Must be a registered edge in the model.</typeparam>
-    /// <returns>An <see cref="IEdgeSet{T}"/> scoped to the edge type.</returns>
+    /// <returns>Returns an <see cref="IEdgeSet{T}"/> scoped to the edge type.</returns>
     IEdgeSet<T> GetEdgesOfType<T>() where T : class;
 }

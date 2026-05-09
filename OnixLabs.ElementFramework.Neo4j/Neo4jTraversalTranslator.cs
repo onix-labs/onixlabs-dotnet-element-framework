@@ -33,7 +33,10 @@ namespace OnixLabs.ElementFramework;
 /// <param name="emitter">The Cypher emitter that translates the AST into a <see cref="DataStatement"/>.</param>
 /// <param name="executor">The Cypher executor that runs the emitted statement against the active transaction.</param>
 /// <param name="materializer">The result materializer that projects rows into the requested CLR type.</param>
-internal sealed class Neo4jTraversalTranslator(IStatementEmitter emitter, IRawStatementExecutor executor, IResultMaterializer materializer) : ITraversalTranslator
+internal sealed class Neo4jTraversalTranslator(
+    IStatementEmitter emitter,
+    IRawStatementExecutor executor,
+    IResultMaterializer materializer) : ITraversalTranslator
 {
     /// <inheritdoc/>
     public IEnumerable<TResult> Translate<TResult>(IGraphModel model, TraversalAst ast)
@@ -71,7 +74,18 @@ internal sealed class Neo4jTraversalTranslator(IStatementEmitter emitter, IRawSt
     public IAsyncEnumerable<TResult> TranslateAsync<TResult>(IGraphModel model, TraversalAst ast, CancellationToken token = default) =>
         TranslateAsyncCore<TResult>(model, ast, token);
 
-    private async IAsyncEnumerable<TResult> TranslateAsyncCore<TResult>(IGraphModel model, TraversalAst ast, [EnumeratorCancellation] CancellationToken token)
+    /// <summary>
+    /// Translates and executes <paramref name="ast"/>, yielding each materialized row as a <typeparamref name="TResult"/>.
+    /// </summary>
+    /// <typeparam name="TResult">The CLR type to materialize each row into.</typeparam>
+    /// <param name="model">The graph model that scopes the traversal.</param>
+    /// <param name="ast">The traversal AST to translate and execute.</param>
+    /// <param name="token">A <see cref="CancellationToken"/> that cancels the enumeration.</param>
+    /// <returns>Returns an asynchronous enumeration of materialized results.</returns>
+    private async IAsyncEnumerable<TResult> TranslateAsyncCore<TResult>(
+        IGraphModel model,
+        TraversalAst ast,
+        [EnumeratorCancellation] CancellationToken token)
     {
         IAsyncEnumerable<IReadOnlyDictionary<string, object?>> rows;
         ReturnKind kind;
@@ -91,13 +105,33 @@ internal sealed class Neo4jTraversalTranslator(IStatementEmitter emitter, IRawSt
             yield return Materialize<TResult>(model, row, ast.ReturnAlias, kind);
     }
 
-    private TResult Materialize<TResult>(IGraphModel model, IReadOnlyDictionary<string, object?> row, string alias, ReturnKind kind) => kind switch
+    /// <summary>
+    /// Materializes a single result row as a node or edge based on <paramref name="kind"/>.
+    /// </summary>
+    /// <typeparam name="TResult">The CLR type to materialize into.</typeparam>
+    /// <param name="model">The graph model that scopes the traversal.</param>
+    /// <param name="row">The result row to materialize.</param>
+    /// <param name="alias">The return alias whose value is materialized from <paramref name="row"/>.</param>
+    /// <param name="kind">Indicates whether the alias resolves to a node or an edge.</param>
+    /// <returns>Returns the materialized <typeparamref name="TResult"/> instance.</returns>
+    /// <exception cref="TraversalTranslationException">Thrown when <paramref name="kind"/> is not a recognized return kind.</exception>
+    private TResult Materialize<TResult>(
+        IGraphModel model,
+        IReadOnlyDictionary<string, object?> row,
+        string alias,
+        ReturnKind kind) => kind switch
     {
         ReturnKind.Node => materializer.MaterializeNode<TResult>(model, row, alias),
         ReturnKind.Edge => materializer.MaterializeEdge<TResult>(model, row, alias),
         _ => throw new TraversalTranslationException($"Unknown return kind '{kind}'.")
     };
 
+    /// <summary>
+    /// Resolves whether the AST's return alias refers to a node or an edge segment.
+    /// </summary>
+    /// <param name="ast">The traversal AST whose return alias is being resolved.</param>
+    /// <returns>Returns <see cref="ReturnKind.Node"/> when the return alias refers to a node segment, or <see cref="ReturnKind.Edge"/> when it refers to a relationship segment.</returns>
+    /// <exception cref="TraversalTranslationException">Thrown when the return alias does not match a bound segment, or the segment kind is not recognized.</exception>
     private static ReturnKind ResolveReturnKind(TraversalAst ast)
     {
         PatternSegment segment = ast.Segments.FirstOrDefault(s => s.Alias == ast.ReturnAlias) ?? throw new TraversalTranslationException(
@@ -111,9 +145,19 @@ internal sealed class Neo4jTraversalTranslator(IStatementEmitter emitter, IRawSt
         };
     }
 
+    /// <summary>
+    /// Specifies whether a traversal's return alias resolves to a node or an edge segment.
+    /// </summary>
     private enum ReturnKind
     {
+        /// <summary>
+        /// The return alias resolves to a node segment.
+        /// </summary>
         Node,
+
+        /// <summary>
+        /// The return alias resolves to a relationship segment.
+        /// </summary>
         Edge
     }
 }

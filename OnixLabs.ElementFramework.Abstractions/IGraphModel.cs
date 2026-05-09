@@ -31,7 +31,7 @@ public interface IGraphModel
     /// Gets the metadata for the registered node type identified by <paramref name="nodeType"/>.
     /// </summary>
     /// <param name="nodeType">The CLR type of the node to look up.</param>
-    /// <returns>The metadata for the registered node type.</returns>
+    /// <returns>Returns the metadata for the registered node type.</returns>
     /// <exception cref="ModelConfigurationException">Thrown when the node type is not registered with the model.</exception>
     INodeMetadata GetNode(Type nodeType);
 
@@ -39,7 +39,7 @@ public interface IGraphModel
     /// Gets the metadata for the registered relationship identified by <paramref name="edgeType"/>.
     /// </summary>
     /// <param name="edgeType">The CLR type of the edge to look up.</param>
-    /// <returns>The metadata for the registered relationship.</returns>
+    /// <returns>Returns the metadata for the registered relationship.</returns>
     /// <exception cref="ModelConfigurationException">Thrown when the relationship is not registered with the model.</exception>
     IRelationshipMetadata GetRelationship(Type edgeType);
 }

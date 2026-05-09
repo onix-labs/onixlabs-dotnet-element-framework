@@ -30,7 +30,7 @@ internal interface IChangeTracker
     /// <summary>
     /// Flushes all pending tracked operations to the underlying store.
     /// </summary>
-    /// <returns>The number of changes that were written.</returns>
+    /// <returns>Returns the number of changes that were written.</returns>
     /// <exception cref="GraphContextException">Thrown when the flush fails.</exception>
     int Flush();
 
@@ -38,7 +38,7 @@ internal interface IChangeTracker
     /// Asynchronously flushes all pending tracked operations to the underlying store.
     /// </summary>
     /// <param name="token">The token that may be used to cancel the operation.</param>
-    /// <returns>A task that resolves to the number of changes that were written.</returns>
+    /// <returns>Returns a task that resolves to the number of changes that were written.</returns>
     /// <exception cref="GraphContextException">Thrown when the flush fails.</exception>
     Task<int> FlushAsync(CancellationToken token = default);
 
@@ -112,7 +112,7 @@ internal interface IChangeTracker
     /// </summary>
     /// <typeparam name="T">The node type. Must be a registered node in the model.</typeparam>
     /// <param name="key">The configured key value of the node.</param>
-    /// <returns>The tracked node with the supplied key, or <see langword="null"/> if no such node is tracked.</returns>
+    /// <returns>Returns the tracked node with the supplied key, or <see langword="null"/> if no such node is tracked.</returns>
     T? Find<T>(object key) where T : class;
 
     /// <summary>

@@ -36,8 +36,19 @@ internal sealed class RelationshipBuilder<TStart, TEdge, TEnd> : IRelationshipBu
     where TEdge : class
     where TEnd : class
 {
+    /// <summary>
+    /// The set of edge property name overrides keyed by <see cref="PropertyInfo"/>.
+    /// </summary>
     private readonly Dictionary<PropertyInfo, string> propertyNameOverrides = [];
+
+    /// <summary>
+    /// The set of edge properties explicitly excluded from the produced <see cref="RelationshipMetadata"/>.
+    /// </summary>
     private readonly HashSet<PropertyInfo> ignoredProperties = [];
+
+    /// <summary>
+    /// The configured relationship type, defaulting to the edge CLR type name.
+    /// </summary>
     private string relationshipType = typeof(TEdge).Name;
 
     /// <summary>
@@ -87,6 +98,13 @@ internal sealed class RelationshipBuilder<TStart, TEdge, TEnd> : IRelationshipBu
         return new RelationshipMetadata(typeof(TStart), typeof(TEdge), typeof(TEnd), relationshipType, properties);
     }
 
+    /// <summary>
+    /// Resolves the <see cref="PropertyInfo"/> referenced by the supplied member-access expression.
+    /// </summary>
+    /// <typeparam name="TProperty">The CLR type of the selected property.</typeparam>
+    /// <param name="selector">The lambda expression selecting the property.</param>
+    /// <returns>Returns the <see cref="PropertyInfo"/> referenced by <paramref name="selector"/>.</returns>
+    /// <exception cref="ArgumentException">Thrown when <paramref name="selector"/> is not a property-access expression.</exception>
     private static PropertyInfo ResolveProperty<TProperty>(Expression<Func<TEdge, TProperty>> selector)
     {
         return selector.Body switch

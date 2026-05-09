@@ -27,7 +27,14 @@ namespace OnixLabs.ElementFramework;
 /// </summary>
 internal sealed class GraphModel : IGraphModel
 {
+    /// <summary>
+    /// The lookup of registered nodes keyed by CLR type.
+    /// </summary>
     private readonly Dictionary<Type, NodeMetadata> nodesByClrType;
+
+    /// <summary>
+    /// The lookup of registered relationships keyed by edge CLR type.
+    /// </summary>
     private readonly Dictionary<Type, RelationshipMetadata> relationshipsByEdgeType;
 
     /// <summary>
@@ -73,6 +80,12 @@ internal sealed class GraphModel : IGraphModel
             : throw new ModelConfigurationException($"No relationship with edge type {edgeType.FullName} is registered in this model.");
     }
 
+    /// <summary>
+    /// Validates the supplied node and relationship metadata to ensure the model is internally consistent before being frozen.
+    /// </summary>
+    /// <param name="nodes">The registered node metadata.</param>
+    /// <param name="relationships">The registered relationship metadata.</param>
+    /// <exception cref="ModelConfigurationException">Thrown when validation fails.</exception>
     private static void Validate(IReadOnlyList<NodeMetadata> nodes, IReadOnlyList<RelationshipMetadata> relationships)
     {
         foreach (NodeMetadata node in nodes)
@@ -91,11 +104,13 @@ internal sealed class GraphModel : IGraphModel
         {
             if (!nodeTypes.Contains(relationship.StartType))
                 throw new ModelConfigurationException(
-                    $"Relationship {relationship.EdgeType.FullName}: start endpoint type {relationship.StartType.FullName} is not registered as a node.");
+                    $"Relationship {relationship.EdgeType.FullName}: start endpoint type " +
+                    $"{relationship.StartType.FullName} is not registered as a node.");
 
             if (!nodeTypes.Contains(relationship.EndType))
                 throw new ModelConfigurationException(
-                    $"Relationship {relationship.EdgeType.FullName}: end endpoint type {relationship.EndType.FullName} is not registered as a node.");
+                    $"Relationship {relationship.EdgeType.FullName}: end endpoint type " +
+                    $"{relationship.EndType.FullName} is not registered as a node.");
         }
 
         Dictionary<(Type Start, Type End, string Type), Type> seen = [];
@@ -104,7 +119,9 @@ internal sealed class GraphModel : IGraphModel
             (Type, Type, string) key = (relationship.StartType, relationship.EndType, relationship.RelationshipType);
             if (seen.TryGetValue(key, out Type? existingEdge))
                 throw new ModelConfigurationException(
-                    $"Relationship type '{relationship.RelationshipType}' is registered twice between {relationship.StartType.Name} and {relationship.EndType.Name} (edge types: {existingEdge.FullName} and {relationship.EdgeType.FullName}).");
+                    $"Relationship type '{relationship.RelationshipType}' is registered twice between " +
+                    $"{relationship.StartType.Name} and {relationship.EndType.Name} " +
+                    $"(edge types: {existingEdge.FullName} and {relationship.EdgeType.FullName}).");
 
             seen[key] = relationship.EdgeType;
         }

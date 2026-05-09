@@ -36,7 +36,7 @@ public interface IGraphTransactionOpener
     /// <summary>
     /// Opens a new graph transaction. The opened transaction becomes the bound context's ambient transaction until commit, rollback, or dispose.
     /// </summary>
-    /// <returns>The newly opened transaction.</returns>
+    /// <returns>Returns the newly opened transaction.</returns>
     /// <exception cref="GraphTransactionAlreadyActiveException">Thrown when another transaction is already active on the bound context.</exception>
     /// <exception cref="GraphTransactionException">Thrown when the transaction cannot be opened.</exception>
     IGraphTransaction Open();
@@ -45,7 +45,7 @@ public interface IGraphTransactionOpener
     /// Asynchronously opens a new graph transaction. The opened transaction becomes the bound context's ambient transaction until commit, rollback, or dispose.
     /// </summary>
     /// <param name="token">The token that may be used to cancel the operation.</param>
-    /// <returns>A task that resolves to the newly opened transaction.</returns>
+    /// <returns>Returns a task that resolves to the newly opened transaction.</returns>
     /// <exception cref="GraphTransactionAlreadyActiveException">Thrown when another transaction is already active on the bound context.</exception>
     /// <exception cref="GraphTransactionException">Thrown when the transaction cannot be opened.</exception>
     Task<IGraphTransaction> OpenAsync(CancellationToken token = default);

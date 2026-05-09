@@ -30,6 +30,6 @@ internal interface INodeMetadataBuilder
     /// <summary>
     /// Reduces the accumulated builder configuration into a frozen <see cref="NodeMetadata"/> instance.
     /// </summary>
-    /// <returns>The frozen <see cref="NodeMetadata"/> built from the accumulated configuration.</returns>
+    /// <returns>Returns the frozen <see cref="NodeMetadata"/> built from the accumulated configuration.</returns>
     NodeMetadata Build();
 }

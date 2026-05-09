@@ -56,7 +56,8 @@ internal sealed class EdgeSet<T>(
     public async IAsyncEnumerable<T> AsAsyncEnumerable([EnumeratorCancellation] CancellationToken token = default)
     {
         DataStatement statement = emitter.EmitAsEnumerableEdges<T>(model);
-        IAsyncEnumerable<IReadOnlyDictionary<string, object?>> rows = executor.ExecuteAsync(statement.Statement, statement.Parameters, token);
+        IAsyncEnumerable<IReadOnlyDictionary<string, object?>> rows =
+            executor.ExecuteAsync(statement.Statement, statement.Parameters, token);
         await foreach (IReadOnlyDictionary<string, object?> row in rows.ConfigureAwait(false))
             yield return materializer.MaterializeEdge<T>(model, row, "r");
     }

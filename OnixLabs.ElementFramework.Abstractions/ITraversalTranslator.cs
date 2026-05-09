@@ -33,7 +33,7 @@ public interface ITraversalTranslator
     /// <typeparam name="TResult">The CLR type of each materialized result.</typeparam>
     /// <param name="model">The frozen graph model used for translation.</param>
     /// <param name="ast">The traversal AST produced by the fluent builder.</param>
-    /// <returns>An enumerable of materialized results. Construction is eager; enumeration is lazy.</returns>
+    /// <returns>Returns an enumerable of materialized results. Construction is eager; enumeration is lazy.</returns>
     /// <exception cref="TraversalTranslationException">Thrown when the traversal cannot be translated or initial execution fails.</exception>
     IEnumerable<TResult> Translate<TResult>(IGraphModel model, TraversalAst ast);
 
@@ -44,7 +44,7 @@ public interface ITraversalTranslator
     /// <param name="model">The frozen graph model used for translation.</param>
     /// <param name="ast">The traversal AST produced by the fluent builder.</param>
     /// <param name="token">The token that may be used to cancel the enumeration.</param>
-    /// <returns>An asynchronous enumerable of materialized results.</returns>
+    /// <returns>Returns an asynchronous enumerable of materialized results.</returns>
     /// <exception cref="TraversalTranslationException">Thrown when the traversal cannot be translated or initial execution fails.</exception>
     IAsyncEnumerable<TResult> TranslateAsync<TResult>(IGraphModel model, TraversalAst ast, CancellationToken token = default);
 }

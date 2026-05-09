@@ -30,6 +30,6 @@ internal interface IRelationshipMetadataBuilder
     /// <summary>
     /// Reduces the accumulated builder configuration into a frozen <see cref="RelationshipMetadata"/> instance.
     /// </summary>
-    /// <returns>The frozen <see cref="RelationshipMetadata"/> built from the accumulated configuration.</returns>
+    /// <returns>Returns the frozen <see cref="RelationshipMetadata"/> built from the accumulated configuration.</returns>
     RelationshipMetadata Build();
 }

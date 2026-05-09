@@ -34,7 +34,7 @@ public interface IResultMaterializer
     /// <param name="model">The frozen graph model used for property mapping.</param>
     /// <param name="row">The result row from which to read the bound entity.</param>
     /// <param name="alias">The alias under which the entity is bound in <paramref name="row"/>.</param>
-    /// <returns>The materialized node instance.</returns>
+    /// <returns>Returns the materialized node instance.</returns>
     /// <exception cref="ResultMaterializationException">Thrown when the entity cannot be materialized.</exception>
     T MaterializeNode<T>(IGraphModel model, IReadOnlyDictionary<string, object?> row, string alias);
 
@@ -45,7 +45,7 @@ public interface IResultMaterializer
     /// <param name="model">The frozen graph model used for property mapping.</param>
     /// <param name="row">The result row from which to read the bound entity.</param>
     /// <param name="alias">The alias under which the entity is bound in <paramref name="row"/>.</param>
-    /// <returns>The materialized edge instance.</returns>
+    /// <returns>Returns the materialized edge instance.</returns>
     /// <exception cref="ResultMaterializationException">Thrown when the entity cannot be materialized.</exception>
     T MaterializeEdge<T>(IGraphModel model, IReadOnlyDictionary<string, object?> row, string alias);
 }

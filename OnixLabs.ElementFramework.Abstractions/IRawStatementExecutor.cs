@@ -32,7 +32,7 @@ public interface IRawStatementExecutor
     /// </summary>
     /// <param name="statement">The statement text in the provider's native query language.</param>
     /// <param name="parameters">The parameter bindings referenced by <paramref name="statement"/>, keyed by parameter name without any provider-specific prefix.</param>
-    /// <returns>An enumerable of result rows. Construction is eager; enumeration is lazy.</returns>
+    /// <returns>Returns an enumerable of result rows. Construction is eager; enumeration is lazy.</returns>
     /// <exception cref="RawStatementException">Thrown when the statement cannot be executed.</exception>
     IEnumerable<IReadOnlyDictionary<string, object?>> Execute(string statement, IReadOnlyDictionary<string, object?> parameters);
 
@@ -42,7 +42,10 @@ public interface IRawStatementExecutor
     /// <param name="statement">The statement text in the provider's native query language.</param>
     /// <param name="parameters">The parameter bindings referenced by <paramref name="statement"/>, keyed by parameter name without any provider-specific prefix.</param>
     /// <param name="token">The token that may be used to cancel the enumeration.</param>
-    /// <returns>An asynchronous enumerable of result rows.</returns>
+    /// <returns>Returns an asynchronous enumerable of result rows.</returns>
     /// <exception cref="RawStatementException">Thrown when the statement cannot be executed or initial execution fails.</exception>
-    IAsyncEnumerable<IReadOnlyDictionary<string, object?>> ExecuteAsync(string statement, IReadOnlyDictionary<string, object?> parameters, CancellationToken token = default);
+    IAsyncEnumerable<IReadOnlyDictionary<string, object?>> ExecuteAsync(
+        string statement,
+        IReadOnlyDictionary<string, object?> parameters,
+        CancellationToken token = default);
 }

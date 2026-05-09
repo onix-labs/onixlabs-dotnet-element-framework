@@ -31,7 +31,7 @@ public interface IEdgeSet<T> where T : class
     /// <summary>
     /// Returns the set as a synchronously enumerable sequence over all edges of the type in the graph.
     /// </summary>
-    /// <returns>An enumerable over the edges. Construction is eager; enumeration is lazy.</returns>
+    /// <returns>Returns an enumerable over the edges. Construction is eager; enumeration is lazy.</returns>
     /// <exception cref="GraphContextException">Thrown when the query cannot be constructed.</exception>
     IEnumerable<T> AsEnumerable();
 
@@ -39,7 +39,7 @@ public interface IEdgeSet<T> where T : class
     /// Returns the set as an asynchronously enumerable sequence over all edges of the type in the graph.
     /// </summary>
     /// <param name="token">The token that may be used to cancel the enumeration.</param>
-    /// <returns>An asynchronous enumerable over the edges.</returns>
+    /// <returns>Returns an asynchronous enumerable over the edges.</returns>
     /// <exception cref="GraphContextException">Thrown when the query cannot be constructed.</exception>
     IAsyncEnumerable<T> AsAsyncEnumerable(CancellationToken token = default);
 
@@ -65,7 +65,7 @@ public interface IEdgeSet<T> where T : class
     /// <param name="edge">The edge instance carrying the relationship's properties.</param>
     /// <param name="end">The end node.</param>
     /// <param name="token">The token that may be used to cancel the operation.</param>
-    /// <returns>A task that represents the staging operation.</returns>
+    /// <returns>Returns a task that represents the staging operation.</returns>
     /// <exception cref="GraphContextException">Thrown when the operation cannot be staged.</exception>
     Task ConnectAsync<TStart, TEnd>(TStart start, T edge, TEnd end, CancellationToken token = default)
         where TStart : class
@@ -91,7 +91,7 @@ public interface IEdgeSet<T> where T : class
     /// <param name="start">The start node.</param>
     /// <param name="end">The end node.</param>
     /// <param name="token">The token that may be used to cancel the operation.</param>
-    /// <returns>A task that represents the staging operation.</returns>
+    /// <returns>Returns a task that represents the staging operation.</returns>
     /// <exception cref="GraphContextException">Thrown when the operation cannot be staged.</exception>
     Task DisconnectAsync<TStart, TEnd>(TStart start, TEnd end, CancellationToken token = default)
         where TStart : class
