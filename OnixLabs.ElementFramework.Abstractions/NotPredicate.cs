@@ -23,12 +23,7 @@
 namespace OnixLabs.ElementFramework;
 
 /// <summary>
-/// Represents the abstract base of a predicate tree accumulated from a Where clause on the fluent traversal builder.
+/// Represents the logical negation of an inner predicate.
 /// </summary>
-/// <remarks>
-/// Concrete subtypes are <see cref="PropertyComparisonPredicate"/>, <see cref="StringComparisonPredicate"/>,
-/// <see cref="NullPredicate"/>, <see cref="AndPredicate"/>, <see cref="OrPredicate"/>, and <see cref="NotPredicate"/>.
-/// Provider authors translate the tree recursively in their <see cref="IStatementEmitter"/> and
-/// <see cref="ITraversalTranslator"/> implementations.
-/// </remarks>
-public abstract record TraversalPredicate;
+/// <param name="Inner">The predicate being negated.</param>
+public sealed record NotPredicate(TraversalPredicate Inner) : TraversalPredicate;

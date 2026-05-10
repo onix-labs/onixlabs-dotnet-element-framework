@@ -23,12 +23,14 @@
 namespace OnixLabs.ElementFramework;
 
 /// <summary>
-/// Represents the abstract base of a predicate tree accumulated from a Where clause on the fluent traversal builder.
+/// Represents a null check over a bound property. Carried as a distinct predicate so emitters can produce
+/// the SQL/Cypher idiomatic <c>IS NULL</c> form rather than <c>= NULL</c>.
 /// </summary>
-/// <remarks>
-/// Concrete subtypes are <see cref="PropertyComparisonPredicate"/>, <see cref="StringComparisonPredicate"/>,
-/// <see cref="NullPredicate"/>, <see cref="AndPredicate"/>, <see cref="OrPredicate"/>, and <see cref="NotPredicate"/>.
-/// Provider authors translate the tree recursively in their <see cref="IStatementEmitter"/> and
-/// <see cref="ITraversalTranslator"/> implementations.
-/// </remarks>
-public abstract record TraversalPredicate;
+/// <param name="Alias">The alias of the bound variable to which the predicate applies.</param>
+/// <param name="ClrPropertyName">The name of the CLR property whose null state is being tested.</param>
+/// <param name="IsNull">When <see langword="true"/> the predicate matches null values; otherwise non-null values.</param>
+public sealed record NullPredicate(
+    string Alias,
+    string ClrPropertyName,
+    bool IsNull
+) : TraversalPredicate;

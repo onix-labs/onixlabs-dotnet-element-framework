@@ -23,12 +23,25 @@
 namespace OnixLabs.ElementFramework;
 
 /// <summary>
-/// Represents the abstract base of a predicate tree accumulated from a Where clause on the fluent traversal builder.
+/// Enumerates the binary comparison operators carried by a <see cref="PropertyComparisonPredicate"/>.
 /// </summary>
-/// <remarks>
-/// Concrete subtypes are <see cref="PropertyComparisonPredicate"/>, <see cref="StringComparisonPredicate"/>,
-/// <see cref="NullPredicate"/>, <see cref="AndPredicate"/>, <see cref="OrPredicate"/>, and <see cref="NotPredicate"/>.
-/// Provider authors translate the tree recursively in their <see cref="IStatementEmitter"/> and
-/// <see cref="ITraversalTranslator"/> implementations.
-/// </remarks>
-public abstract record TraversalPredicate;
+public enum ComparisonOperator
+{
+    /// <summary>Property is equal to value.</summary>
+    Equal,
+
+    /// <summary>Property is not equal to value.</summary>
+    NotEqual,
+
+    /// <summary>Property is strictly less than value.</summary>
+    LessThan,
+
+    /// <summary>Property is less than or equal to value.</summary>
+    LessThanOrEqual,
+
+    /// <summary>Property is strictly greater than value.</summary>
+    GreaterThan,
+
+    /// <summary>Property is greater than or equal to value.</summary>
+    GreaterThanOrEqual
+}

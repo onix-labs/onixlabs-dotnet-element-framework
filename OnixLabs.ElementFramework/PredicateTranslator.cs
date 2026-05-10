@@ -27,56 +27,126 @@ using System.Reflection;
 namespace OnixLabs.ElementFramework;
 
 /// <summary>
-/// Provides translation of property-equality lambda expressions into <see cref="TraversalPredicate"/> values for the fluent traversal builder.
+/// Provides translation of lambda predicates into <see cref="TraversalPredicate"/> trees for the fluent traversal builder.
 /// </summary>
 /// <remarks>
-/// V1 supports only <c>x =&gt; x.PropertyName == value</c> shapes; anything richer (path predicates, function calls, list comprehensions, boolean composition, non-equality operators) throws <see cref="NotSupportedException"/> with a pointer to the raw statement escape hatch.
+/// Supported shapes:
+/// <list type="bullet">
+///   <item>Comparison operators <c>==</c>, <c>!=</c>, <c>&lt;</c>, <c>&lt;=</c>, <c>&gt;</c>, <c>&gt;=</c> between a bound property and a constant.</item>
+///   <item>Boolean composition <c>&amp;&amp;</c>, <c>||</c>, and unary <c>!</c>.</item>
+///   <item>Null checks via <c>== null</c> / <c>!= null</c> in either operand order.</item>
+///   <item>String instance methods <c>Contains</c>, <c>StartsWith</c>, and <c>EndsWith</c> in their single-argument overload.</item>
+/// </list>
+/// Anything else throws <see cref="NotSupportedException"/> with a pointer to <see cref="IRawStatementExecutor"/>.
 /// </remarks>
 internal static class PredicateTranslator
 {
     /// <summary>
-    /// Translates the supplied predicate expression into a property-equality <see cref="TraversalPredicate"/>.
+    /// Translates the supplied predicate expression into a <see cref="TraversalPredicate"/> tree scoped to <paramref name="alias"/>.
     /// </summary>
     /// <typeparam name="TNode">The bound CLR type the lambda parameter refers to.</typeparam>
     /// <param name="alias">The alias the predicate is scoped to (the alias of the bound segment that <c>Where</c> was invoked on).</param>
     /// <param name="predicate">The lambda predicate to translate.</param>
-    /// <returns>Returns the translated predicate ready for accumulation in <see cref="TraversalState.Predicates"/>.</returns>
-    /// <exception cref="NotSupportedException">Thrown when the expression shape is anything other than <c>p =&gt; p.Property == constant</c>.</exception>
-    public static TraversalPredicate Translate<TNode>(string alias, Expression<Func<TNode, bool>> predicate)
-    {
-        if (predicate.Body is not BinaryExpression { NodeType: ExpressionType.Equal } binary)
-            throw NotSupported();
+    /// <returns>Returns the translated predicate tree ready for accumulation in <see cref="TraversalState.Predicates"/>.</returns>
+    /// <exception cref="NotSupportedException">Thrown when the expression contains an unsupported shape.</exception>
+    public static TraversalPredicate Translate<TNode>(string alias, Expression<Func<TNode, bool>> predicate) =>
+        Walk(predicate.Body, alias, predicate.Parameters[0]);
 
-        ParameterExpression parameter = predicate.Parameters[0];
+    private static TraversalPredicate Walk(Expression expression, string alias, ParameterExpression parameter) =>
+        expression.NodeType switch
+        {
+            ExpressionType.AndAlso => new AndPredicate(
+                Walk(((BinaryExpression)expression).Left, alias, parameter),
+                Walk(((BinaryExpression)expression).Right, alias, parameter)),
+            ExpressionType.OrElse => new OrPredicate(
+                Walk(((BinaryExpression)expression).Left, alias, parameter),
+                Walk(((BinaryExpression)expression).Right, alias, parameter)),
+            ExpressionType.Not => new NotPredicate(
+                Walk(((UnaryExpression)expression).Operand, alias, parameter)),
+            ExpressionType.Equal or
+                ExpressionType.NotEqual or
+                ExpressionType.LessThan or
+                ExpressionType.LessThanOrEqual or
+                ExpressionType.GreaterThan or
+                ExpressionType.GreaterThanOrEqual => TranslateComparison((BinaryExpression)expression, alias, parameter),
+            ExpressionType.Call => TranslateMethodCall((MethodCallExpression)expression, alias, parameter),
+            _ => throw NotSupported(expression)
+        };
+
+    private static TraversalPredicate TranslateComparison(BinaryExpression binary, string alias, ParameterExpression parameter)
+    {
         PropertyInfo property;
         Expression valueSide;
+        bool flipped;
 
         if (TryReadParameterPropertyAccess(binary.Left, parameter, out PropertyInfo? leftProperty))
         {
             property = leftProperty;
             valueSide = binary.Right;
+            flipped = false;
         }
         else if (TryReadParameterPropertyAccess(binary.Right, parameter, out PropertyInfo? rightProperty))
         {
             property = rightProperty;
             valueSide = binary.Left;
+            flipped = true;
         }
         else
         {
-            throw NotSupported();
+            throw NotSupported(binary);
         }
 
-        object? value = Expression.Lambda(valueSide).Compile().DynamicInvoke();
-        return new TraversalPredicate(alias, property.Name, value);
+        object? value = Evaluate(valueSide);
+
+        if (value is null)
+        {
+            return binary.NodeType switch
+            {
+                ExpressionType.Equal => new NullPredicate(alias, property.Name, IsNull: true),
+                ExpressionType.NotEqual => new NullPredicate(alias, property.Name, IsNull: false),
+                _ => throw NotSupported(binary, "null may only be compared with == or !=.")
+            };
+        }
+
+        ComparisonOperator op = binary.NodeType switch
+        {
+            ExpressionType.Equal => ComparisonOperator.Equal,
+            ExpressionType.NotEqual => ComparisonOperator.NotEqual,
+            ExpressionType.LessThan => flipped ? ComparisonOperator.GreaterThan : ComparisonOperator.LessThan,
+            ExpressionType.LessThanOrEqual => flipped ? ComparisonOperator.GreaterThanOrEqual : ComparisonOperator.LessThanOrEqual,
+            ExpressionType.GreaterThan => flipped ? ComparisonOperator.LessThan : ComparisonOperator.GreaterThan,
+            ExpressionType.GreaterThanOrEqual => flipped ? ComparisonOperator.LessThanOrEqual : ComparisonOperator.GreaterThanOrEqual,
+            _ => throw NotSupported(binary)
+        };
+
+        return new PropertyComparisonPredicate(alias, property.Name, op, value);
     }
 
-    /// <summary>
-    /// Attempts to read a property-access expression rooted on the supplied lambda parameter.
-    /// </summary>
-    /// <param name="expression">The candidate expression to inspect.</param>
-    /// <param name="parameter">The lambda parameter the property access must be rooted on.</param>
-    /// <param name="property">When this method returns <see langword="true"/>, contains the resolved <see cref="PropertyInfo"/>.</param>
-    /// <returns>Returns <see langword="true"/> when the expression is a property access on <paramref name="parameter"/>; otherwise, <see langword="false"/>.</returns>
+    private static TraversalPredicate TranslateMethodCall(MethodCallExpression call, string alias, ParameterExpression parameter)
+    {
+        if (call.Method.DeclaringType != typeof(string) || call.Object is null)
+            throw NotSupported(call);
+
+        if (!TryReadParameterPropertyAccess(call.Object, parameter, out PropertyInfo? property))
+            throw NotSupported(call);
+
+        if (call.Arguments.Count != 1)
+            throw NotSupported(call, "Only the single-argument overloads of Contains, StartsWith, and EndsWith are supported.");
+
+        if (Evaluate(call.Arguments[0]) is not string value)
+            throw NotSupported(call, "String operator argument must evaluate to a non-null string.");
+
+        StringComparisonOperator op = call.Method.Name switch
+        {
+            nameof(string.Contains) => StringComparisonOperator.Contains,
+            nameof(string.StartsWith) => StringComparisonOperator.StartsWith,
+            nameof(string.EndsWith) => StringComparisonOperator.EndsWith,
+            _ => throw NotSupported(call)
+        };
+
+        return new StringComparisonPredicate(alias, property.Name, op, value);
+    }
+
     private static bool TryReadParameterPropertyAccess(
         Expression expression,
         ParameterExpression parameter,
@@ -92,11 +162,12 @@ internal static class PredicateTranslator
         return false;
     }
 
-    /// <summary>
-    /// Creates a <see cref="NotSupportedException"/> describing the supported predicate shape and pointing at the raw-statement escape hatch.
-    /// </summary>
-    /// <returns>Returns a <see cref="NotSupportedException"/> with a guidance message.</returns>
-    private static NotSupportedException NotSupported() =>
-        new("Only property-equality predicates over the bound variable are supported (e.g. x => x.Name == \"Alice\"). " +
+    private static object? Evaluate(Expression expression) =>
+        Expression.Lambda(expression).Compile().DynamicInvoke();
+
+    private static NotSupportedException NotSupported(Expression expression, string? detail = null) =>
+        new($"Unsupported predicate shape '{expression.NodeType}'" +
+            (detail is null ? "" : $": {detail}") +
+            ". Supported shapes: comparison (==, !=, <, <=, >, >=), boolean composition (&&, ||, !), null checks, and string Contains/StartsWith/EndsWith. " +
             "Use IRawStatementExecutor.Execute(...) for richer expressions.");
 }

@@ -192,9 +192,11 @@ public class GraphTraversalTests
 
         TraversalAst ast = translator.LastAst!;
         TraversalPredicate predicate = Assert.Single(ast.Predicates);
-        Assert.Equal("a", predicate.Alias);
-        Assert.Equal(nameof(Author.Name), predicate.ClrPropertyName);
-        Assert.Equal("Alice", predicate.Value);
+        PropertyComparisonPredicate comparison = Assert.IsType<PropertyComparisonPredicate>(predicate);
+        Assert.Equal("a", comparison.Alias);
+        Assert.Equal(nameof(Author.Name), comparison.ClrPropertyName);
+        Assert.Equal(ComparisonOperator.Equal, comparison.Operator);
+        Assert.Equal("Alice", comparison.Value);
     }
 
     [Fact(DisplayName = "Where chains accumulate multiple predicates in order")]
@@ -210,8 +212,8 @@ public class GraphTraversalTests
 
         TraversalAst ast = translator.LastAst!;
         Assert.Equal(2, ast.Predicates.Count);
-        Assert.Equal(nameof(Author.Name), ast.Predicates[0].ClrPropertyName);
-        Assert.Equal(nameof(Author.Id), ast.Predicates[1].ClrPropertyName);
+        Assert.Equal(nameof(Author.Name), Assert.IsType<PropertyComparisonPredicate>(ast.Predicates[0]).ClrPropertyName);
+        Assert.Equal(nameof(Author.Id), Assert.IsType<PropertyComparisonPredicate>(ast.Predicates[1]).ClrPropertyName);
     }
 
     [Fact(DisplayName = "Node throws ArgumentException when the alias is null or whitespace")]

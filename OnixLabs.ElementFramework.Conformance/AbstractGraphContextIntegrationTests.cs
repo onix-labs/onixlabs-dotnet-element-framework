@@ -456,6 +456,198 @@ public abstract class AbstractGraphContextIntegrationTests(ITestOutputHelper out
         Assert.Equal("Alice", materialized[0].Name);
     }
 
+    [Fact(DisplayName = "Traversal Match with Where '!=' should yield non-matching nodes")]
+    public void TraversalMatchWhereNotEqualShouldYieldNonMatching()
+    {
+        Author alice = Author.Create("Alice");
+        Author bob = Author.Create("Bob");
+        Context.Nodes<Author>().Add(alice);
+        Context.Nodes<Author>().Add(bob);
+        Context.SaveChanges();
+
+        Author[] materialized = [.. Context.Traversal
+            .Match()
+            .Node<Author>("a")
+            .Where(a => a.Name != "Alice")
+            .Return<Author>("a")];
+
+        Assert.Single(materialized);
+        Assert.Equal("Bob", materialized[0].Name);
+    }
+
+    [Fact(DisplayName = "Traversal Match with Where ordered comparison ('>=') on a date should filter accordingly")]
+    public void TraversalMatchWhereOrderedComparisonShouldFilter()
+    {
+        DateTimeOffset cutoff = new(2025, 1, 1, 0, 0, 0, TimeSpan.Zero);
+        Author early = new() { Id = Guid.NewGuid(), Name = "Early", JoinedAt = cutoff.AddDays(-1) };
+        Author late = new() { Id = Guid.NewGuid(), Name = "Late", JoinedAt = cutoff.AddDays(1) };
+        Context.Nodes<Author>().Add(early);
+        Context.Nodes<Author>().Add(late);
+        Context.SaveChanges();
+
+        Author[] materialized = [.. Context.Traversal
+            .Match()
+            .Node<Author>("a")
+            .Where(a => a.JoinedAt >= cutoff)
+            .Return<Author>("a")];
+
+        Assert.Single(materialized);
+        Assert.Equal("Late", materialized[0].Name);
+    }
+
+    [Fact(DisplayName = "Traversal Match with Where '||' should yield rows matching either branch")]
+    public void TraversalMatchWhereOrShouldYieldEitherBranch()
+    {
+        Author alice = Author.Create("Alice");
+        Author bob = Author.Create("Bob");
+        Author carol = Author.Create("Carol");
+        Context.Nodes<Author>().Add(alice);
+        Context.Nodes<Author>().Add(bob);
+        Context.Nodes<Author>().Add(carol);
+        Context.SaveChanges();
+
+        Author[] materialized = [.. Context.Traversal
+            .Match()
+            .Node<Author>("a")
+            .Where(a => a.Name == "Alice" || a.Name == "Bob")
+            .Return<Author>("a")];
+
+        string[] names = [.. materialized.Select(a => a.Name).OrderBy(name => name)];
+        Assert.Equal(["Alice", "Bob"], names);
+    }
+
+    [Fact(DisplayName = "Traversal Match with Where '&&' across two properties should yield rows matching both branches")]
+    public void TraversalMatchWhereAndShouldYieldBothBranches()
+    {
+        DateTimeOffset cutoff = new(2025, 1, 1, 0, 0, 0, TimeSpan.Zero);
+        Author aliceEarly = new() { Id = Guid.NewGuid(), Name = "Alice", JoinedAt = cutoff.AddDays(-1) };
+        Author aliceLate = new() { Id = Guid.NewGuid(), Name = "Alice", JoinedAt = cutoff.AddDays(1) };
+        Author bobLate = new() { Id = Guid.NewGuid(), Name = "Bob", JoinedAt = cutoff.AddDays(1) };
+        Context.Nodes<Author>().Add(aliceEarly);
+        Context.Nodes<Author>().Add(aliceLate);
+        Context.Nodes<Author>().Add(bobLate);
+        Context.SaveChanges();
+
+        Author[] materialized = [.. Context.Traversal
+            .Match()
+            .Node<Author>("a")
+            .Where(a => a.Name == "Alice" && a.JoinedAt >= cutoff)
+            .Return<Author>("a")];
+
+        Assert.Single(materialized);
+        Assert.Equal(aliceLate.Id, materialized[0].Id);
+    }
+
+    [Fact(DisplayName = "Traversal Match with Where '!' should negate the inner predicate")]
+    public void TraversalMatchWhereNotShouldNegateInner()
+    {
+        Author alice = Author.Create("Alice");
+        Author bob = Author.Create("Bob");
+        Context.Nodes<Author>().Add(alice);
+        Context.Nodes<Author>().Add(bob);
+        Context.SaveChanges();
+
+        Author[] materialized = [.. Context.Traversal
+            .Match()
+            .Node<Author>("a")
+            .Where(a => !(a.Name == "Alice"))
+            .Return<Author>("a")];
+
+        Assert.Single(materialized);
+        Assert.Equal("Bob", materialized[0].Name);
+    }
+
+    [Fact(DisplayName = "Traversal Match with Where Contains should yield rows whose property contains the substring")]
+    public void TraversalMatchWhereStringContainsShouldYieldMatching()
+    {
+        Author alice = Author.Create("Alice");
+        Author bob = Author.Create("Bob");
+        Context.Nodes<Author>().Add(alice);
+        Context.Nodes<Author>().Add(bob);
+        Context.SaveChanges();
+
+        Author[] materialized = [.. Context.Traversal
+            .Match()
+            .Node<Author>("a")
+            .Where(a => a.Name.Contains("li"))
+            .Return<Author>("a")];
+
+        Assert.Single(materialized);
+        Assert.Equal("Alice", materialized[0].Name);
+    }
+
+    [Fact(DisplayName = "Traversal Match with Where StartsWith should yield rows whose property has the given prefix")]
+    public void TraversalMatchWhereStringStartsWithShouldYieldMatching()
+    {
+        Author alice = Author.Create("Alice");
+        Author bob = Author.Create("Bob");
+        Context.Nodes<Author>().Add(alice);
+        Context.Nodes<Author>().Add(bob);
+        Context.SaveChanges();
+
+        Author[] materialized = [.. Context.Traversal
+            .Match()
+            .Node<Author>("a")
+            .Where(a => a.Name.StartsWith("Al"))
+            .Return<Author>("a")];
+
+        Assert.Single(materialized);
+        Assert.Equal("Alice", materialized[0].Name);
+    }
+
+    [Fact(DisplayName = "Traversal Match with Where EndsWith should yield rows whose property has the given suffix")]
+    public void TraversalMatchWhereStringEndsWithShouldYieldMatching()
+    {
+        Author alice = Author.Create("Alice");
+        Author bob = Author.Create("Bob");
+        Context.Nodes<Author>().Add(alice);
+        Context.Nodes<Author>().Add(bob);
+        Context.SaveChanges();
+
+        Author[] materialized = [.. Context.Traversal
+            .Match()
+            .Node<Author>("a")
+            .Where(a => a.Name.EndsWith("ce"))
+            .Return<Author>("a")];
+
+        Assert.Single(materialized);
+        Assert.Equal("Alice", materialized[0].Name);
+    }
+
+    [Fact(DisplayName = "Traversal Match with Where '!= null' on a required property should yield every row")]
+    public void TraversalMatchWhereNotNullShouldYieldAllRows()
+    {
+        Author alice = Author.Create("Alice");
+        Author bob = Author.Create("Bob");
+        Context.Nodes<Author>().Add(alice);
+        Context.Nodes<Author>().Add(bob);
+        Context.SaveChanges();
+
+        Author[] materialized = [.. Context.Traversal
+            .Match()
+            .Node<Author>("a")
+            .Where(a => a.Name != null)
+            .Return<Author>("a")];
+
+        Assert.Equal(2, materialized.Length);
+    }
+
+    [Fact(DisplayName = "Traversal Match with Where '== null' on a required property should yield zero rows")]
+    public void TraversalMatchWhereNullShouldYieldNoRows()
+    {
+        Author alice = Author.Create("Alice");
+        Context.Nodes<Author>().Add(alice);
+        Context.SaveChanges();
+
+        Author[] materialized = [.. Context.Traversal
+            .Match()
+            .Node<Author>("a")
+            .Where(a => a.Name == null)
+            .Return<Author>("a")];
+
+        Assert.Empty(materialized);
+    }
+
     [Fact(DisplayName = "Traversal Match returning the edge alias should materialize edge properties")]
     public void TraversalMatchWithEdgeReturnShouldMaterializeEdgeProperties()
     {

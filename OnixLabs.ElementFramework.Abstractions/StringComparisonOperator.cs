@@ -23,12 +23,16 @@
 namespace OnixLabs.ElementFramework;
 
 /// <summary>
-/// Represents the abstract base of a predicate tree accumulated from a Where clause on the fluent traversal builder.
+/// Enumerates the string-matching operators carried by a <see cref="StringComparisonPredicate"/>.
 /// </summary>
-/// <remarks>
-/// Concrete subtypes are <see cref="PropertyComparisonPredicate"/>, <see cref="StringComparisonPredicate"/>,
-/// <see cref="NullPredicate"/>, <see cref="AndPredicate"/>, <see cref="OrPredicate"/>, and <see cref="NotPredicate"/>.
-/// Provider authors translate the tree recursively in their <see cref="IStatementEmitter"/> and
-/// <see cref="ITraversalTranslator"/> implementations.
-/// </remarks>
-public abstract record TraversalPredicate;
+public enum StringComparisonOperator
+{
+    /// <summary>Property string contains value as a substring.</summary>
+    Contains,
+
+    /// <summary>Property string starts with value.</summary>
+    StartsWith,
+
+    /// <summary>Property string ends with value.</summary>
+    EndsWith
+}

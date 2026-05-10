@@ -273,7 +273,9 @@ internal sealed class CypherEmitter : IStatementEmitter
             for (int i = 0; i < ast.Predicates.Count; i++)
             {
                 if (i > 0) builder.Append(" AND ");
+                builder.Append('(');
                 AppendPredicate(builder, binder, model, ast, ast.Predicates[i]);
+                builder.Append(')');
             }
         }
 
@@ -319,13 +321,15 @@ internal sealed class CypherEmitter : IStatementEmitter
     }
 
     /// <summary>
-    /// Appends a single traversal predicate to <paramref name="builder"/> as a Cypher equality expression and binds its value to <paramref name="binder"/>.
+    /// Appends a traversal predicate tree to <paramref name="builder"/> as a Cypher boolean expression, binding any
+    /// leaf values to <paramref name="binder"/>. Recurses into <see cref="AndPredicate"/>, <see cref="OrPredicate"/>,
+    /// and <see cref="NotPredicate"/>.
     /// </summary>
     /// <param name="builder">The <see cref="StringBuilder"/> that receives the emitted predicate.</param>
-    /// <param name="binder">The parameter binder that captures the predicate value.</param>
-    /// <param name="model">The graph model used to resolve the predicate property.</param>
+    /// <param name="binder">The parameter binder that captures predicate values.</param>
+    /// <param name="model">The graph model used to resolve the predicate properties.</param>
     /// <param name="ast">The traversal AST that owns the predicate.</param>
-    /// <param name="predicate">The predicate to emit.</param>
+    /// <param name="predicate">The predicate tree to emit.</param>
     private static void AppendPredicate(
         StringBuilder builder,
         ParameterBinder binder,
@@ -333,27 +337,122 @@ internal sealed class CypherEmitter : IStatementEmitter
         TraversalAst ast,
         TraversalPredicate predicate)
     {
-        IPropertyMetadata property = ResolvePredicateProperty(model, ast, predicate);
+        switch (predicate)
+        {
+            case PropertyComparisonPredicate comparison:
+                AppendPropertyComparison(builder, binder, model, ast, comparison);
+                break;
+            case StringComparisonPredicate stringComparison:
+                AppendStringComparison(builder, binder, model, ast, stringComparison);
+                break;
+            case NullPredicate nullPredicate:
+                AppendNull(builder, model, ast, nullPredicate);
+                break;
+            case AndPredicate and:
+                builder.Append('(');
+                AppendPredicate(builder, binder, model, ast, and.Left);
+                builder.Append(" AND ");
+                AppendPredicate(builder, binder, model, ast, and.Right);
+                builder.Append(')');
+                break;
+            case OrPredicate or:
+                builder.Append('(');
+                AppendPredicate(builder, binder, model, ast, or.Left);
+                builder.Append(" OR ");
+                AppendPredicate(builder, binder, model, ast, or.Right);
+                builder.Append(')');
+                break;
+            case NotPredicate not:
+                builder.Append("NOT (");
+                AppendPredicate(builder, binder, model, ast, not.Inner);
+                builder.Append(')');
+                break;
+            default:
+                throw new StatementEmissionException($"Unknown predicate type '{predicate.GetType().FullName}'.");
+        }
+    }
+
+    private static void AppendPropertyComparison(
+        StringBuilder builder,
+        ParameterBinder binder,
+        IGraphModel model,
+        TraversalAst ast,
+        PropertyComparisonPredicate predicate)
+    {
+        IPropertyMetadata property = ResolvePredicateProperty(model, ast, predicate.Alias, predicate.ClrPropertyName);
         string token = binder.Bind(property.Name, PropertySerializer.Serialize(predicate.Value));
         builder.Append(CypherIdentifier.Escape(predicate.Alias))
             .Append('.')
             .Append(CypherIdentifier.Escape(property.Name))
-            .Append(" = ")
+            .Append(' ')
+            .Append(CypherOperator(predicate.Operator))
+            .Append(' ')
             .Append(token);
     }
 
+    private static void AppendStringComparison(
+        StringBuilder builder,
+        ParameterBinder binder,
+        IGraphModel model,
+        TraversalAst ast,
+        StringComparisonPredicate predicate)
+    {
+        IPropertyMetadata property = ResolvePredicateProperty(model, ast, predicate.Alias, predicate.ClrPropertyName);
+        string token = binder.Bind(property.Name, predicate.Value);
+        builder.Append(CypherIdentifier.Escape(predicate.Alias))
+            .Append('.')
+            .Append(CypherIdentifier.Escape(property.Name))
+            .Append(' ')
+            .Append(CypherStringOperator(predicate.Operator))
+            .Append(' ')
+            .Append(token);
+    }
+
+    private static void AppendNull(
+        StringBuilder builder,
+        IGraphModel model,
+        TraversalAst ast,
+        NullPredicate predicate)
+    {
+        IPropertyMetadata property = ResolvePredicateProperty(model, ast, predicate.Alias, predicate.ClrPropertyName);
+        builder.Append(CypherIdentifier.Escape(predicate.Alias))
+            .Append('.')
+            .Append(CypherIdentifier.Escape(property.Name))
+            .Append(predicate.IsNull ? " IS NULL" : " IS NOT NULL");
+    }
+
+    private static string CypherOperator(ComparisonOperator op) => op switch
+    {
+        ComparisonOperator.Equal => "=",
+        ComparisonOperator.NotEqual => "<>",
+        ComparisonOperator.LessThan => "<",
+        ComparisonOperator.LessThanOrEqual => "<=",
+        ComparisonOperator.GreaterThan => ">",
+        ComparisonOperator.GreaterThanOrEqual => ">=",
+        _ => throw new StatementEmissionException($"Unknown comparison operator '{op}'.")
+    };
+
+    private static string CypherStringOperator(StringComparisonOperator op) => op switch
+    {
+        StringComparisonOperator.Contains => "CONTAINS",
+        StringComparisonOperator.StartsWith => "STARTS WITH",
+        StringComparisonOperator.EndsWith => "ENDS WITH",
+        _ => throw new StatementEmissionException($"Unknown string comparison operator '{op}'.")
+    };
+
     /// <summary>
-    /// Resolves the <see cref="IPropertyMetadata"/> referenced by <paramref name="predicate"/> on its bound segment within <paramref name="ast"/>.
+    /// Resolves the <see cref="IPropertyMetadata"/> for <paramref name="clrPropertyName"/> on the segment bound to <paramref name="alias"/> within <paramref name="ast"/>.
     /// </summary>
     /// <param name="model">The graph model used to look up node and relationship metadata.</param>
     /// <param name="ast">The traversal AST that owns the predicate.</param>
-    /// <param name="predicate">The predicate whose property is being resolved.</param>
+    /// <param name="alias">The alias the predicate is scoped to.</param>
+    /// <param name="clrPropertyName">The CLR property name referenced by the predicate.</param>
     /// <returns>Returns the <see cref="IPropertyMetadata"/> matching the predicate's CLR property name on its bound alias.</returns>
     /// <exception cref="StatementEmissionException">Thrown when the predicate references an unbound alias or a property that is not mapped on that alias.</exception>
-    private static IPropertyMetadata ResolvePredicateProperty(IGraphModel model, TraversalAst ast, TraversalPredicate predicate)
+    private static IPropertyMetadata ResolvePredicateProperty(IGraphModel model, TraversalAst ast, string alias, string clrPropertyName)
     {
-        PatternSegment segment = ast.Segments.FirstOrDefault(s => s.Alias == predicate.Alias)
-                                 ?? throw new StatementEmissionException($"Predicate references unbound alias '{predicate.Alias}'.");
+        PatternSegment segment = ast.Segments.FirstOrDefault(s => s.Alias == alias)
+                                 ?? throw new StatementEmissionException($"Predicate references unbound alias '{alias}'.");
 
         IReadOnlyList<IPropertyMetadata> properties = segment switch
         {
@@ -362,9 +461,9 @@ internal sealed class CypherEmitter : IStatementEmitter
             _ => throw new StatementEmissionException($"Unknown pattern segment type '{segment.GetType().FullName}'.")
         };
 
-        return properties.FirstOrDefault(p => p.Property.Name == predicate.ClrPropertyName)
+        return properties.FirstOrDefault(p => p.Property.Name == clrPropertyName)
                ?? throw new StatementEmissionException(
-                   $"Predicate references property '{predicate.ClrPropertyName}' which is not mapped on alias '{predicate.Alias}'.");
+                   $"Predicate references property '{clrPropertyName}' which is not mapped on alias '{alias}'.");
     }
 
     /// <summary>

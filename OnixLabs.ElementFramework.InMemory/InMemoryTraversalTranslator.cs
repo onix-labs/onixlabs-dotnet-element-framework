@@ -276,7 +276,8 @@ internal sealed class InMemoryTraversalTranslator(InMemoryGraphTransactionOpener
     }
 
     /// <summary>
-    /// Tests whether every predicate in <paramref name="predicates"/> is satisfied by <paramref name="binding"/>.
+    /// Tests whether every predicate tree in <paramref name="predicates"/> evaluates to <see langword="true"/>
+    /// against <paramref name="binding"/>. The top-level list is conjunctive.
     /// </summary>
     /// <param name="predicates">The predicate conjunction.</param>
     /// <param name="binding">The bindings produced by the pattern walk.</param>
@@ -285,20 +286,81 @@ internal sealed class InMemoryTraversalTranslator(InMemoryGraphTransactionOpener
     private static bool PredicatesMatch(IReadOnlyList<TraversalPredicate> predicates, Dictionary<string, object> binding)
     {
         foreach (TraversalPredicate predicate in predicates)
-        {
-            if (!binding.TryGetValue(predicate.Alias, out object? bound))
-                throw new TraversalTranslationException($"Predicate references unbound alias '{predicate.Alias}'.");
-
-            PropertyInfo? property = bound.GetType().GetProperty(predicate.ClrPropertyName);
-            if (property is null)
-                throw new TraversalTranslationException(
-                    $"Predicate references property '{predicate.ClrPropertyName}' which is not present on alias '{predicate.Alias}'.");
-
-            object? actual = property.GetValue(bound);
-            if (!Equals(actual, predicate.Value)) return false;
-        }
-
+            if (!Evaluate(predicate, binding))
+                return false;
         return true;
+    }
+
+    /// <summary>
+    /// Recursively evaluates a single predicate tree node against <paramref name="binding"/>.
+    /// </summary>
+    /// <param name="predicate">The predicate tree node to evaluate.</param>
+    /// <param name="binding">The bindings produced by the pattern walk.</param>
+    /// <returns>Returns the boolean result of the predicate.</returns>
+    /// <exception cref="TraversalTranslationException">Thrown when a predicate references an unbound alias or unknown property.</exception>
+    private static bool Evaluate(TraversalPredicate predicate, Dictionary<string, object> binding) => predicate switch
+    {
+        PropertyComparisonPredicate comparison => EvaluatePropertyComparison(comparison, binding),
+        StringComparisonPredicate stringComparison => EvaluateStringComparison(stringComparison, binding),
+        NullPredicate nullPredicate => EvaluateNull(nullPredicate, binding),
+        AndPredicate and => Evaluate(and.Left, binding) && Evaluate(and.Right, binding),
+        OrPredicate or => Evaluate(or.Left, binding) || Evaluate(or.Right, binding),
+        NotPredicate not => !Evaluate(not.Inner, binding),
+        _ => throw new TraversalTranslationException($"Unknown predicate type '{predicate.GetType().FullName}'.")
+    };
+
+    private static bool EvaluatePropertyComparison(PropertyComparisonPredicate predicate, Dictionary<string, object> binding)
+    {
+        object? actual = ReadProperty(binding, predicate.Alias, predicate.ClrPropertyName);
+
+        if (predicate.Operator is ComparisonOperator.Equal)
+            return Equals(actual, predicate.Value);
+        if (predicate.Operator is ComparisonOperator.NotEqual)
+            return !Equals(actual, predicate.Value);
+
+        if (actual is null || predicate.Value is null) return false;
+
+        int comparison = Comparer<object>.Default.Compare(actual, predicate.Value);
+        return predicate.Operator switch
+        {
+            ComparisonOperator.LessThan => comparison < 0,
+            ComparisonOperator.LessThanOrEqual => comparison <= 0,
+            ComparisonOperator.GreaterThan => comparison > 0,
+            ComparisonOperator.GreaterThanOrEqual => comparison >= 0,
+            _ => throw new TraversalTranslationException($"Unknown comparison operator '{predicate.Operator}'.")
+        };
+    }
+
+    private static bool EvaluateStringComparison(StringComparisonPredicate predicate, Dictionary<string, object> binding)
+    {
+        object? actual = ReadProperty(binding, predicate.Alias, predicate.ClrPropertyName);
+        if (actual is not string text) return false;
+        return predicate.Operator switch
+        {
+            StringComparisonOperator.Contains => text.Contains(predicate.Value),
+            StringComparisonOperator.StartsWith => text.StartsWith(predicate.Value),
+            StringComparisonOperator.EndsWith => text.EndsWith(predicate.Value),
+            _ => throw new TraversalTranslationException($"Unknown string comparison operator '{predicate.Operator}'.")
+        };
+    }
+
+    private static bool EvaluateNull(NullPredicate predicate, Dictionary<string, object> binding)
+    {
+        object? actual = ReadProperty(binding, predicate.Alias, predicate.ClrPropertyName);
+        return predicate.IsNull ? actual is null : actual is not null;
+    }
+
+    private static object? ReadProperty(Dictionary<string, object> binding, string alias, string clrPropertyName)
+    {
+        if (!binding.TryGetValue(alias, out object? bound))
+            throw new TraversalTranslationException($"Predicate references unbound alias '{alias}'.");
+
+        PropertyInfo? property = bound.GetType().GetProperty(clrPropertyName);
+        if (property is null)
+            throw new TraversalTranslationException(
+                $"Predicate references property '{clrPropertyName}' which is not present on alias '{alias}'.");
+
+        return property.GetValue(bound);
     }
 
     /// <summary>
