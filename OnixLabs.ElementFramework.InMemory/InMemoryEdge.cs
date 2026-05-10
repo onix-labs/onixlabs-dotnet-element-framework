@@ -20,14 +20,21 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-namespace OnixLabs.ElementFramework.Neo4j.IntegrationTests.TestFixtures.BlogApplication;
+namespace OnixLabs.ElementFramework;
 
-public sealed class Wrote
-{
-    public required DateTimeOffset WrittenAt { get; init; }
-
-    public static Wrote Now() => new()
-    {
-        WrittenAt = DateTimeOffset.UtcNow
-    };
-}
+/// <summary>
+/// Represents an edge tuple stored in the <see cref="InMemoryStore"/>.
+/// </summary>
+/// <param name="StartType">The CLR type of the start node.</param>
+/// <param name="StartKey">The configured key of the start node.</param>
+/// <param name="EdgeType">The CLR type of the edge.</param>
+/// <param name="Edge">The edge instance carrying the relationship's payload.</param>
+/// <param name="EndType">The CLR type of the end node.</param>
+/// <param name="EndKey">The configured key of the end node.</param>
+internal sealed record InMemoryEdge(
+    Type StartType,
+    object StartKey,
+    Type EdgeType,
+    object Edge,
+    Type EndType,
+    object EndKey);

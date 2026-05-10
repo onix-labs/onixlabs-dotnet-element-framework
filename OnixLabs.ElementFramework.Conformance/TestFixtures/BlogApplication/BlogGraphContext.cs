@@ -20,18 +20,15 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-namespace OnixLabs.ElementFramework.Neo4j.IntegrationTests.TestFixtures.BlogApplication;
+namespace OnixLabs.ElementFramework.Conformance.TestFixtures.BlogApplication;
 
-public sealed class Author
+public sealed class BlogGraphContext(GraphContextOptions options) : GraphContext(options)
 {
-    public Guid Id { get; init; }
-    public required string Name { get; set; }
-    public required DateTimeOffset JoinedAt { get; init; }
-
-    public static Author Create(string name) => new()
-    {
-        Id = Guid.NewGuid(),
-        Name = name,
-        JoinedAt = DateTimeOffset.UtcNow
-    };
+    protected override void OnModelCreating(IGraphModelBuilder modelBuilder) => modelBuilder
+        .ApplyConfiguration(new AuthorConfiguration())
+        .ApplyConfiguration(new PostConfiguration())
+        .ApplyConfiguration(new CommentConfiguration())
+        .ApplyConfiguration(new WroteConfiguration())
+        .ApplyConfiguration(new CommentOnConfiguration())
+        .ApplyConfiguration(new ReplyToConfiguration());
 }

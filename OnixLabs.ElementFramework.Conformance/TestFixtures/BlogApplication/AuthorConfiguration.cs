@@ -20,18 +20,9 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-namespace OnixLabs.ElementFramework.Neo4j.IntegrationTests.TestFixtures.BlogApplication;
+namespace OnixLabs.ElementFramework.Conformance.TestFixtures.BlogApplication;
 
-public sealed class Comment
+public sealed class AuthorConfiguration : INodeTypeConfiguration<Author>
 {
-    public Guid Id { get; init; }
-    public required string Body { get; init; }
-    public required DateTimeOffset CreatedAt { get; init; }
-
-    public static Comment Create(string body) => new()
-    {
-        Id = Guid.NewGuid(),
-        Body = body,
-        CreatedAt = DateTimeOffset.UtcNow
-    };
+    public void Configure(INodeBuilder<Author> builder) => builder.HasKey(author => author.Id);
 }

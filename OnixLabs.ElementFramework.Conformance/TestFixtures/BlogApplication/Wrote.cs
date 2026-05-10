@@ -20,9 +20,14 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-namespace OnixLabs.ElementFramework.Neo4j.IntegrationTests.TestFixtures.BlogApplication;
+namespace OnixLabs.ElementFramework.Conformance.TestFixtures.BlogApplication;
 
-public sealed class AuthorConfiguration : INodeTypeConfiguration<Author>
+public sealed class Wrote
 {
-    public void Configure(INodeBuilder<Author> builder) => builder.HasKey(author => author.Id);
+    public required DateTimeOffset WrittenAt { get; init; }
+
+    public static Wrote Now() => new()
+    {
+        WrittenAt = DateTimeOffset.UtcNow
+    };
 }

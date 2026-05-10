@@ -20,17 +20,6 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-using Microsoft.Extensions.DependencyInjection;
-using OnixLabs.ElementFramework.Conformance;
-using OnixLabs.ElementFramework.Conformance.TestFixtures.BlogApplication;
-using Xunit.Abstractions;
+namespace OnixLabs.ElementFramework.Conformance.TestFixtures.BlogApplication;
 
-namespace OnixLabs.ElementFramework.Neo4j.IntegrationTests;
-
-public sealed class Neo4jGraphContextIntegrationTests(ITestOutputHelper output, Neo4jFixture fixture)
-    : AbstractGraphContextIntegrationTests(output), IClassFixture<Neo4jFixture>
-{
-    protected override void ConfigureServices(IServiceCollection services) =>
-        services.AddGraphContext<BlogGraphContext>(builder =>
-            builder.UseNeo4j(() => fixture.ConnectionString, fixture.AuthToken));
-}
+public sealed class CommentOn;

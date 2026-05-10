@@ -21,10 +21,10 @@
 // SOFTWARE.
 
 using Microsoft.Extensions.DependencyInjection;
-using OnixLabs.ElementFramework.Neo4j.IntegrationTests.TestFixtures.BlogApplication;
+using OnixLabs.ElementFramework.Conformance.TestFixtures.BlogApplication;
 using Xunit.Abstractions;
 
-namespace OnixLabs.ElementFramework.Neo4j.IntegrationTests;
+namespace OnixLabs.ElementFramework.Conformance;
 
 public abstract class AbstractGraphContextIntegrationTests(ITestOutputHelper output) : IntegrationTestBase(output)
 {
@@ -34,7 +34,15 @@ public abstract class AbstractGraphContextIntegrationTests(ITestOutputHelper out
     /// Wipes the shared graph before each test so that tests in the same class do not bleed state into each other.
     /// </summary>
     /// <returns>Returns a task that completes once the graph has been reset.</returns>
-    protected override Task OnInitializeAsync()
+    protected override Task OnInitializeAsync() => ResetGraphAsync();
+
+    /// <summary>
+    /// Resets the underlying graph store to an empty state. The default implementation executes the Cypher
+    /// statement <c>MATCH (n) DETACH DELETE n</c> via <see cref="IRawStatementExecutor"/>; non-Cypher providers
+    /// should override this to use a provider-native reset.
+    /// </summary>
+    /// <returns>Returns a task that completes once the graph has been reset.</returns>
+    protected virtual Task ResetGraphAsync()
     {
         _ = Context.RawStatement.Execute("MATCH (n) DETACH DELETE n", new Dictionary<string, object?>());
         return Task.CompletedTask;
@@ -298,7 +306,7 @@ public abstract class AbstractGraphContextIntegrationTests(ITestOutputHelper out
     }
 
     [Fact(DisplayName = "RawStatement Execute should return result rows")]
-    public void RawStatementExecuteShouldReturnResultRows()
+    public virtual void RawStatementExecuteShouldReturnResultRows()
     {
         Author alice = Author.Create("Alice");
         Context.Nodes<Author>().Add(alice);
@@ -560,7 +568,7 @@ public abstract class AbstractGraphContextIntegrationTests(ITestOutputHelper out
     }
 
     [Fact(DisplayName = "RawStatement.ExecuteAsync should yield result rows")]
-    public async Task RawStatementExecuteAsyncShouldYieldRows()
+    public virtual async Task RawStatementExecuteAsyncShouldYieldRows()
     {
         Author alice = Author.Create("Alice");
         await Context.Nodes<Author>().AddAsync(alice);
@@ -577,7 +585,7 @@ public abstract class AbstractGraphContextIntegrationTests(ITestOutputHelper out
     }
 
     [Fact(DisplayName = "RawStatement.Execute writes should be visible to the OGM read APIs")]
-    public void RawStatementExecuteShouldPersistMutationVisibleToOgm()
+    public virtual void RawStatementExecuteShouldPersistMutationVisibleToOgm()
     {
         Guid id = Guid.NewGuid();
         const string name = "Caroline";
@@ -593,7 +601,7 @@ public abstract class AbstractGraphContextIntegrationTests(ITestOutputHelper out
     }
 
     [Fact(DisplayName = "RawStatement.Execute with a multi-row return should yield every row")]
-    public void RawStatementExecuteShouldYieldMultipleRows()
+    public virtual void RawStatementExecuteShouldYieldMultipleRows()
     {
         Author alice = Author.Create("Alice");
         Author bob = Author.Create("Bob");

@@ -23,7 +23,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using Xunit.Abstractions;
 
-namespace OnixLabs.ElementFramework.Neo4j.IntegrationTests;
+namespace OnixLabs.ElementFramework.Conformance;
 
 public abstract class IntegrationTestBase : IAsyncLifetime
 {

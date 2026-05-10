@@ -20,15 +20,9 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-namespace OnixLabs.ElementFramework.Neo4j.IntegrationTests.TestFixtures.BlogApplication;
+namespace OnixLabs.ElementFramework.Conformance.TestFixtures.BlogApplication;
 
-public sealed class BlogGraphContext(GraphContextOptions options) : GraphContext(options)
+public sealed class CommentConfiguration : INodeTypeConfiguration<Comment>
 {
-    protected override void OnModelCreating(IGraphModelBuilder modelBuilder) => modelBuilder
-        .ApplyConfiguration(new AuthorConfiguration())
-        .ApplyConfiguration(new PostConfiguration())
-        .ApplyConfiguration(new CommentConfiguration())
-        .ApplyConfiguration(new WroteConfiguration())
-        .ApplyConfiguration(new CommentOnConfiguration())
-        .ApplyConfiguration(new ReplyToConfiguration());
+    public void Configure(INodeBuilder<Comment> builder) => builder.HasKey(comment => comment.Id);
 }

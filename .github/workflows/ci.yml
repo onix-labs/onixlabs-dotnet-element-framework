@@ -49,7 +49,14 @@ jobs:
           --no-build
           --verbosity normal
 
-      - name: Run integration tests
+      - name: Run in-memory conformance tests
+        run: >
+          dotnet test OnixLabs.ElementFramework.InMemory.IntegrationTests/OnixLabs.ElementFramework.InMemory.IntegrationTests.csproj
+          --configuration Release
+          --no-build
+          --verbosity normal
+
+      - name: Run Neo4j integration tests
         run: >
           dotnet test OnixLabs.ElementFramework.Neo4j.IntegrationTests/OnixLabs.ElementFramework.Neo4j.IntegrationTests.csproj
           --configuration Release
@@ -114,7 +121,7 @@ jobs:
           VERSION: ${{ steps.version.outputs.VERSION }}
         run: |
           set -e
-          for pkg in onixlabs.elementframework onixlabs.elementframework.abstractions onixlabs.elementframework.neo4j; do
+          for pkg in onixlabs.elementframework onixlabs.elementframework.abstractions onixlabs.elementframework.neo4j onixlabs.elementframework.inmemory; do
             url="https://api.nuget.org/v3-flatcontainer/${pkg}/${VERSION}/${pkg}.nuspec"
             status=$(curl -s -o /dev/null -w '%{http_code}' "${url}")
             if [[ "${status}" == "200" ]]; then
@@ -127,7 +134,7 @@ jobs:
         env:
           VERSION: ${{ steps.version.outputs.VERSION }}
         run: |
-          for proj in OnixLabs.ElementFramework.Abstractions OnixLabs.ElementFramework OnixLabs.ElementFramework.Neo4j; do
+          for proj in OnixLabs.ElementFramework.Abstractions OnixLabs.ElementFramework OnixLabs.ElementFramework.Neo4j OnixLabs.ElementFramework.InMemory; do
             dotnet pack "${proj}/${proj}.csproj" \
               --configuration Release \
               --output ./artifacts \

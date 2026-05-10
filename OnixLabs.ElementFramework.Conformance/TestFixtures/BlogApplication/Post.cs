@@ -20,11 +20,20 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-namespace OnixLabs.ElementFramework.Neo4j.IntegrationTests.TestFixtures.BlogApplication;
+namespace OnixLabs.ElementFramework.Conformance.TestFixtures.BlogApplication;
 
-public sealed class CommentOnConfiguration : IRelationshipConfiguration<Comment, CommentOn, Post>
+public sealed class Post
 {
-    public void Configure(IRelationshipBuilder<Comment, CommentOn, Post> builder)
+    public Guid Id { get; init; }
+    public required string Title { get; init; }
+    public required string Body { get; set; }
+    public required DateTimeOffset PublishedAt { get; init; }
+
+    public static Post Create(string title, string body) => new()
     {
-    }
+        Id = Guid.NewGuid(),
+        Title = title,
+        Body = body,
+        PublishedAt = DateTimeOffset.UtcNow
+    };
 }

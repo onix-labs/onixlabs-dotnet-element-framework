@@ -20,9 +20,11 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-namespace OnixLabs.ElementFramework.Neo4j.IntegrationTests.TestFixtures.BlogApplication;
+namespace OnixLabs.ElementFramework.Conformance.TestFixtures.BlogApplication;
 
-public sealed class CommentConfiguration : INodeTypeConfiguration<Comment>
+public sealed class ReplyToConfiguration : IRelationshipConfiguration<Comment, ReplyTo, Comment>
 {
-    public void Configure(INodeBuilder<Comment> builder) => builder.HasKey(comment => comment.Id);
+    public void Configure(IRelationshipBuilder<Comment, ReplyTo, Comment> builder)
+    {
+    }
 }
