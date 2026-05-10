@@ -36,19 +36,19 @@ namespace OnixLabs.ElementFramework;
 internal sealed class InMemoryRawStatementExecutor(InMemoryGraphTransactionOpener opener) : IRawStatementExecutor
 {
     /// <summary>
-    /// The alias used to project node payloads into result rows.
+    /// The alias used to project node payloads into result rows. Paired with <see cref="InMemoryResultMaterializer.NodeAlias"/>.
     /// </summary>
-    private const string NodeAlias = "n";
+    private const string NodeAlias = InMemoryResultMaterializer.NodeAlias;
 
     /// <summary>
-    /// The alias used to project edge payloads into result rows.
+    /// The alias used to project edge payloads into result rows. Paired with <see cref="InMemoryResultMaterializer.EdgeAlias"/>.
     /// </summary>
-    private const string EdgeAlias = "r";
+    private const string EdgeAlias = InMemoryResultMaterializer.EdgeAlias;
 
     /// <summary>
-    /// The alias used to project existence counts into result rows.
+    /// The alias used to project existence counts into result rows. Paired with <see cref="InMemoryResultMaterializer.CountAlias"/>.
     /// </summary>
-    private const string CountAlias = "count";
+    private const string CountAlias = InMemoryResultMaterializer.CountAlias;
 
     /// <inheritdoc/>
     public IEnumerable<IReadOnlyDictionary<string, object?>> Execute(string statement, IReadOnlyDictionary<string, object?> parameters)

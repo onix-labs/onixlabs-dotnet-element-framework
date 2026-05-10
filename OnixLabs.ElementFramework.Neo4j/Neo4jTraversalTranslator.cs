@@ -121,8 +121,8 @@ internal sealed class Neo4jTraversalTranslator(
         string alias,
         ReturnKind kind) => kind switch
     {
-        ReturnKind.Node => materializer.MaterializeNode<TResult>(model, row, alias),
-        ReturnKind.Edge => materializer.MaterializeEdge<TResult>(model, row, alias),
+        ReturnKind.Node => materializer.MaterializeNodeAt<TResult>(model, row, alias),
+        ReturnKind.Edge => materializer.MaterializeEdgeAt<TResult>(model, row, alias),
         _ => throw new TraversalTranslationException($"Unknown return kind '{kind}'.")
     };
 

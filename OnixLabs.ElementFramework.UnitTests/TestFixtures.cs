@@ -227,9 +227,22 @@ internal sealed class FakeTraversalTranslator : ITraversalTranslator
 
 internal sealed class FakeResultMaterializer : IResultMaterializer
 {
-    public T MaterializeNode<T>(IGraphModel model, IReadOnlyDictionary<string, object?> row, string alias) =>
+    public const string NodeAlias = "n";
+    public const string EdgeAlias = "r";
+    public const string CountAlias = "count";
+
+    public T MaterializeNode<T>(IGraphModel model, IReadOnlyDictionary<string, object?> row) =>
+        (T)row[NodeAlias]!;
+
+    public T MaterializeEdge<T>(IGraphModel model, IReadOnlyDictionary<string, object?> row) =>
+        (T)row[EdgeAlias]!;
+
+    public T MaterializeNodeAt<T>(IGraphModel model, IReadOnlyDictionary<string, object?> row, string alias) =>
         (T)row[alias]!;
 
-    public T MaterializeEdge<T>(IGraphModel model, IReadOnlyDictionary<string, object?> row, string alias) =>
+    public T MaterializeEdgeAt<T>(IGraphModel model, IReadOnlyDictionary<string, object?> row, string alias) =>
         (T)row[alias]!;
+
+    public bool ReadExists(IReadOnlyDictionary<string, object?> row) =>
+        row[CountAlias] is long and > 0;
 }

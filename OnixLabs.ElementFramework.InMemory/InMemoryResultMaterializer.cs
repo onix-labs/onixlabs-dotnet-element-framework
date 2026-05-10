@@ -28,15 +28,46 @@ namespace OnixLabs.ElementFramework;
 /// <remarks>
 /// In-memory rows already carry the live CLR instance under the requested alias, so materialization is just a typed
 /// cast. The framework returns the very same instance the consumer stored, which preserves reference identity across
-/// reads — handy for tests asserting on shared mutable state.
+/// reads — handy for tests asserting on shared mutable state. The <see cref="NodeAlias"/>, <see cref="EdgeAlias"/>, and
+/// <see cref="CountAlias"/> constants are the in-memory provider's internal convention for typed-read row keys; they
+/// are paired with the same constants in <see cref="InMemoryRawStatementExecutor"/>.
 /// </remarks>
 internal sealed class InMemoryResultMaterializer : IResultMaterializer
 {
-    /// <inheritdoc/>
-    public T MaterializeNode<T>(IGraphModel model, IReadOnlyDictionary<string, object?> row, string alias) => Cast<T>(row, alias);
+    /// <summary>
+    /// The row key under which the in-memory executor projects node entities for typed reads.
+    /// </summary>
+    internal const string NodeAlias = "n";
+
+    /// <summary>
+    /// The row key under which the in-memory executor projects edge entities for typed reads.
+    /// </summary>
+    internal const string EdgeAlias = "r";
+
+    /// <summary>
+    /// The row key under which the in-memory executor projects the existence count.
+    /// </summary>
+    internal const string CountAlias = "count";
 
     /// <inheritdoc/>
-    public T MaterializeEdge<T>(IGraphModel model, IReadOnlyDictionary<string, object?> row, string alias) => Cast<T>(row, alias);
+    public T MaterializeNode<T>(IGraphModel model, IReadOnlyDictionary<string, object?> row) => Cast<T>(row, NodeAlias);
+
+    /// <inheritdoc/>
+    public T MaterializeEdge<T>(IGraphModel model, IReadOnlyDictionary<string, object?> row) => Cast<T>(row, EdgeAlias);
+
+    /// <inheritdoc/>
+    public T MaterializeNodeAt<T>(IGraphModel model, IReadOnlyDictionary<string, object?> row, string alias) => Cast<T>(row, alias);
+
+    /// <inheritdoc/>
+    public T MaterializeEdgeAt<T>(IGraphModel model, IReadOnlyDictionary<string, object?> row, string alias) => Cast<T>(row, alias);
+
+    /// <inheritdoc/>
+    public bool ReadExists(IReadOnlyDictionary<string, object?> row)
+    {
+        if (!row.TryGetValue(CountAlias, out object? value))
+            throw new ResultMaterializationException($"Existence row does not contain the expected '{CountAlias}' alias.");
+        return value is long count && count > 0;
+    }
 
     /// <summary>
     /// Casts the value bound at <paramref name="alias"/> in <paramref name="row"/> to <typeparamref name="T"/>.

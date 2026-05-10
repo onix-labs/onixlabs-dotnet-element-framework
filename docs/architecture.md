@@ -228,7 +228,7 @@ The set instances themselves ([`NodeSet<T>`](../OnixLabs.ElementFramework/NodeSe
 - **Mutations forward to the change tracker.** `Add` → `TrackAdd`, `Connect` → `TrackConnect`, etc. Async counterparts are sync underneath because tracking is in-process; they exist for API symmetry.
 - **Reads route through the emitter → executor → materializer chain.** `AsEnumerable`/`AsAsyncEnumerable` go straight through. `Exists` interprets a single-row "count" projection. `FindById` first consults the identity map; on a miss, it queries, materializes, and `Attach`es the result so subsequent calls return the same instance.
 
-Result rows from the executor carry the entity under a known alias — `"n"` for nodes, `"r"` for edges, `"count"` for existence checks. These aliases are part of the contract between the framework and providers: the emitter is expected to emit a statement that returns its entity under that alias, and the materializer is expected to read it from there. This is one of the contract sharp edges flagged in production-readiness — see [§13](#13-known-constraints-and-non-goals).
+Result rows from the executor carry the entity under whatever shape the provider's emitter chose to produce. The framework never names a specific alias for typed reads: it asks the materializer for `MaterializeNode`/`MaterializeEdge`/`ReadExists` and lets each provider pick the row shape its emitter agrees with internally. For consumer-supplied traversal aliases (the `alias` argument to `Return<T>(alias)`), the framework calls the materializer's `MaterializeNodeAt`/`MaterializeEdgeAt` and passes the consumer's alias straight through.
 
 ### 5.6 Transaction lifecycle: `GraphTransactionFactory`, `RollbackAwareGraphTransaction`
 
@@ -262,7 +262,7 @@ The seam between the framework and any concrete database is six interfaces and o
 | Contract | Role | Notes |
 | --- | --- | --- |
 | `IStatementEmitter` | Translates a domain operation (`EmitAdd`, `EmitConnect`, `EmitFindById`, `EmitTraversal`, etc.) into a `DataStatement`. Stateless, pure. | The single largest surface in the contract — 11 methods. The framework calls them via the `ChangeTracker.pending` closures. |
-| `IResultMaterializer` | Projects a result-row dictionary into a CLR node or edge instance, given an alias. | Two methods: `MaterializeNode<T>` and `MaterializeEdge<T>`. |
+| `IResultMaterializer` | Projects a result-row dictionary into a CLR node or edge instance, plus reads existence outcomes. | Five methods: `MaterializeNode<T>` / `MaterializeEdge<T>` (typed reads, no alias — provider-internal convention) and `MaterializeNodeAt<T>` / `MaterializeEdgeAt<T>` (alias-bearing, for traversal returns), plus `ReadExists` for the existence check. |
 | `IRawStatementExecutor` | Runs a `DataStatement` against the database (or escape-hatch raw text). Returns rows as `IReadOnlyDictionary<string, object?>` sequences. | Sync + async; the executor is the only place that talks to the database transport. |
 | `IGraphTransactionOpener` | Opens new `IGraphTransaction` instances; exposes the currently-active ambient transaction. | "One ambient at a time" is the v1 invariant — a second `Open` while another is active throws `GraphTransactionAlreadyActiveException`. |
 | `IGraphTransaction` | The transaction handle: `Commit`, `Rollback`, `Dispose` (sync + async). | One-shot: a second commit/rollback after the first is a no-op. |
@@ -273,9 +273,9 @@ The framework treats these as duck-typed: anything that conforms compiles. There
 
 A few of the contract's load-bearing conventions:
 
-- **Read aliases are tribal.** Single-entity reads project under `"n"` (node), `"r"` (edge), or `"count"` (existence). Multi-entity traversals project under whatever alias the consumer supplied to `Return<T>(alias)`. This convention is documented but not enforced by a type.
+- **Typed-read row shape is provider-internal.** For framework-emitted reads (`EmitFindById`, `EmitExists`, `EmitAsEnumerableNodes`, `EmitAsEnumerableEdges`), the provider's emitter and materializer agree privately on row shape — the framework never names `"n"` / `"r"` / `"count"`. A Cypher provider can return rich entities under an alias; a SQL-graph provider can return flat property cells. The framework just calls `MaterializeNode` / `MaterializeEdge` / `ReadExists`.
+- **Traversal row aliases come from the consumer.** `Return<T>(alias)` passes the alias through `ITraversalTranslator` to the materializer's `MaterializeNodeAt` / `MaterializeEdgeAt`.
 - **Parameter keys are unprefixed.** A provider statement that uses `$id` should appear in `DataStatement.Parameters` as `"id"`, not `"$id"`. The provider adds the prefix on the wire.
-- **The materializer reads from `row[alias]`.** Whatever shape the executor returns for that alias (Neo4j's `INode`, an in-memory CLR ref, a flat property dictionary in a future provider) is the materializer's problem to translate.
 
 ---
 
@@ -539,7 +539,7 @@ The transaction wrapper:
 
 ### 9.6 Materialization: `Neo4jResultMaterializer`
 
-Reads `row[alias]` and casts to `INode` (for `MaterializeNode`) or `IRelationship` (for `MaterializeEdge`). For each, it constructs a CLR `T` and walks the registered `IPropertyMetadata` list, copying each mapped property from the Bolt entity's `Properties` dictionary.
+Reads the Bolt entity (`INode` for nodes, `IRelationship` for edges) and constructs a CLR `T`, walking the registered `IPropertyMetadata` list and copying each mapped property from the entity's `Properties` dictionary. For typed framework reads the alias is the provider's internal `NodeAlias` / `EdgeAlias` constant (`"n"` / `"r"`); for traversal returns the alias is passed through from the consumer's `Return<T>(alias)`. `ReadExists` reads `row["count"] is long and > 0`.
 
 Instantiation strategy:
 
@@ -626,7 +626,7 @@ The raw-statement escape hatch isn't useful for the in-memory provider in the wa
 
 ### 10.4 Materialization: `InMemoryResultMaterializer`
 
-Trivial. Rows already carry the live CLR instance under the alias, so materialization is a typed cast. Returning the same instance the consumer stored means **reference identity is preserved** across reads — handy for tests that assert on shared mutable state.
+Trivial. Rows already carry the live CLR instance under the alias, so materialization is a typed cast. The five interface methods all funnel through one `Cast<T>` helper; the alias-free typed-read methods use the provider's internal `NodeAlias` / `EdgeAlias` / `CountAlias` constants. Returning the same instance the consumer stored means **reference identity is preserved** across reads — handy for tests that assert on shared mutable state.
 
 ### 10.5 Transactions: snapshot-based
 
@@ -709,7 +709,8 @@ A new provider needs:
 
 Conventions to honour:
 
-- **Read aliases:** `EmitFindById` and `EmitAsEnumerableNodes` return entities under `"n"`; `EmitAsEnumerableEdges` under `"r"`; `EmitExists` returns a single row whose `"count"` column is a numeric value > 0 on hit (the framework reads `row["count"] is long and > 0` — currently the framework expects `long`).
+- **Typed-read row shape is private to your provider.** The framework calls `MaterializeNode` / `MaterializeEdge` / `ReadExists` without an alias. Your emitter and materializer agree internally on what shape the row takes — a single-entity-under-alias style, a flat-property-cells style, or anything else that round-trips cleanly.
+- **Traversal aliases are passed through.** `MaterializeNodeAt` / `MaterializeEdgeAt` receive the consumer's `Return<T>(alias)` argument and must look up the entity at that alias in the row.
 - **Parameter naming:** values are referenced via `Parameters` keys without any provider prefix. The framework hands the dictionary back to your executor as-is.
 - **Transactional routing:** the executor must consult `opener.Active` to decide whether to run inside the ambient transaction or open a fresh auto-commit scope. The framework will not pass the transaction handle through.
 - **One ambient at a time:** the opener must throw `GraphTransactionAlreadyActiveException` when `Open()` is called and `Active` is non-null.
