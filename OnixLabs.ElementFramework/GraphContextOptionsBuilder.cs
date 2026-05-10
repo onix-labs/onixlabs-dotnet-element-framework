@@ -127,6 +127,11 @@ public sealed class GraphContextOptionsBuilder
     /// <summary>
     /// Sets the <see cref="ILoggerFactory"/> used to produce loggers for diagnostic output. Optional; when not configured, logging is disabled.
     /// </summary>
+    /// <remarks>
+    /// Call this <b>before</b> the provider's <c>Use*</c> extension method. Provider <c>Use*</c> extensions read the
+    /// configured factory at the point they construct their services; if the factory is supplied afterwards the
+    /// provider services will already have been constructed with logging disabled.
+    /// </remarks>
     /// <param name="loggerFactory">The logger factory.</param>
     /// <returns>Returns this <see cref="GraphContextOptionsBuilder"/> to allow further chaining.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="loggerFactory"/> is <see langword="null"/>.</exception>
@@ -136,6 +141,16 @@ public sealed class GraphContextOptionsBuilder
         this.loggerFactory = loggerFactory;
         return this;
     }
+
+    /// <summary>
+    /// Gets the <see cref="ILoggerFactory"/> configured via <see cref="UseLoggerFactory"/>, or <see langword="null"/> when none has been supplied.
+    /// </summary>
+    /// <remarks>
+    /// Exposed for provider <c>Use*</c> extension methods that need to inject loggers into their provider services
+    /// at composition time. Consumer code should not need to read this.
+    /// </remarks>
+    /// <value>The configured <see cref="ILoggerFactory"/>, or <see langword="null"/> when none has been supplied.</value>
+    public ILoggerFactory? LoggerFactory => loggerFactory;
 
     /// <summary>
     /// Builds an immutable <see cref="GraphContextOptions"/> containing the configured provider services and the supplied bootstrap delegate.

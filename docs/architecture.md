@@ -533,7 +533,7 @@ The opener holds a single ambient slot (`active: Neo4jGraphTransaction?`). `Open
 The transaction wrapper:
 
 - `Commit`/`Rollback` (async) drive the underlying `IAsyncTransaction`, then call `CloseAsync` which closes the session and clears the opener's ambient slot exactly once.
-- `Dispose` performs a best-effort `RollbackAsync` (any exception is swallowed) and then `CloseAsync`. Catches in `CloseAsync` and `DisposeAsync` swallow exceptions silently — production-readiness flags this as the observability gap that motivates wiring `ILoggerFactory` properly.
+- `Dispose` performs a best-effort `RollbackAsync` and then `CloseAsync`. Exceptions inside these dispose-path branches are caught (the dispose contract forbids letting them out), but they are now logged at `Warning` rather than swallowed silently — `Neo4jGraphTransaction` accepts an `ILoggerFactory?` and uses it to surface dispose-time failures.
 - Sync paths bridge to async via `GetAwaiter().GetResult()` (same caveat as the executor).
 - The terminal is one-shot: a second commit or rollback after the first is a no-op.
 
@@ -732,8 +732,8 @@ Nested transactions are not supported. Concurrent transactions on a single conte
 **No connection pooling abstraction.**
 Each provider owns its own connection-management strategy (Neo4j caches drivers process-wide; in-memory has nothing to pool). The framework does not standardize lifetime, eviction, or health.
 
-**No observability primitives.**
-`ILoggerFactory` is plumbed through the options builder but not actually consumed by anything — there are zero `Log*` calls in the codebase. Swallowed exceptions in `Neo4jGraphTransaction.CloseAsync` and `DisposeAsync` are silent. Adding logging is one of the highest-value low-risk improvements identified in production-readiness.
+**Logging only; no metrics or distributed-tracing yet.**
+The framework consumes `ILoggerFactory` (set via `GraphContextOptionsBuilder.UseLoggerFactory` or injected through the SP-aware `AddGraphContext` overload) and writes diagnostic events: every Cypher statement at `Debug` (with parameter count, not values), every transaction open / commit / rollback / best-effort-rollback-on-dispose at `Information`, every previously-swallowed dispose-path exception at `Warning`, every `ChangeTracker.Flush` start/end at `Debug` (rollback events at `Warning`). There are no metrics counters, no `System.Diagnostics.Activity` spans, and no health probes yet.
 
 **Sync-over-async surface (Neo4j).**
 The Neo4j driver is async-only; the provider's sync surface bridges via `GetAwaiter().GetResult()`. This deadlocks under hosts that capture a synchronization context (ASP.NET Classic, WinForms, WPF). Use the async surface in those hosts. ASP.NET Core, console, and modern hosted-service consumers are unaffected.

@@ -20,6 +20,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
+using Microsoft.Extensions.Logging;
 using Neo4j.Driver;
 
 namespace OnixLabs.ElementFramework;
@@ -30,10 +31,30 @@ namespace OnixLabs.ElementFramework;
 /// <remarks>
 /// When <see cref="IGraphTransactionOpener.Active"/> is set, the executor runs the query through the active transaction's <see cref="IAsyncTransaction.RunAsync(string, object)"/>; otherwise it opens a fresh auto-commit <see cref="IAsyncSession"/> per call. Result rows are materialized eagerly so faults during the driver round-trip surface immediately rather than at enumeration time. The sync surface bridges to the async driver via <c>GetAwaiter().GetResult()</c>.
 /// </remarks>
-/// <param name="driver">A lazy handle to the shared <see cref="IDriver"/> for the bound Neo4j endpoint, used for auto-commit fallback. Resolution defers to first execute, allowing the connection string to be deferred past <c>AddGraphContext</c> registration time.</param>
-/// <param name="transactionOpener">The <see cref="IGraphTransactionOpener"/> whose <see cref="IGraphTransactionOpener.Active"/> indicates the routing target.</param>
-internal sealed class Neo4jCypherExecutor(Lazy<IDriver> driver, IGraphTransactionOpener transactionOpener) : IRawStatementExecutor
+internal sealed class Neo4jCypherExecutor : IRawStatementExecutor
 {
+    /// <summary>The lazy handle to the shared <see cref="IDriver"/> for the bound Neo4j endpoint.</summary>
+    private readonly Lazy<IDriver> driver;
+
+    /// <summary>The transaction opener whose ambient slot decides the routing target.</summary>
+    private readonly IGraphTransactionOpener transactionOpener;
+
+    /// <summary>The logger this executor writes diagnostic events to.</summary>
+    private readonly ILogger<Neo4jCypherExecutor> logger;
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="Neo4jCypherExecutor"/> class.
+    /// </summary>
+    /// <param name="driver">A lazy handle to the shared <see cref="IDriver"/> for the bound Neo4j endpoint, used for auto-commit fallback. Resolution defers to first execute, allowing the connection string to be deferred past <c>AddGraphContext</c> registration time.</param>
+    /// <param name="transactionOpener">The <see cref="IGraphTransactionOpener"/> whose <see cref="IGraphTransactionOpener.Active"/> indicates the routing target.</param>
+    /// <param name="logger">The typed logger this executor writes diagnostic events to. Pass <see cref="Microsoft.Extensions.Logging.Abstractions.NullLogger{T}.Instance"/> to disable logging.</param>
+    internal Neo4jCypherExecutor(Lazy<IDriver> driver, IGraphTransactionOpener transactionOpener, ILogger<Neo4jCypherExecutor> logger)
+    {
+        this.driver = driver;
+        this.transactionOpener = transactionOpener;
+        this.logger = logger;
+    }
+
     /// <inheritdoc/>
     public IEnumerable<IReadOnlyDictionary<string, object?>> Execute(string statement, IReadOnlyDictionary<string, object?> parameters)
     {
@@ -43,6 +64,7 @@ internal sealed class Neo4jCypherExecutor(Lazy<IDriver> driver, IGraphTransactio
         }
         catch (Exception exception)
         {
+            logger.LogWarning(exception, "Failed to execute Cypher statement: {Statement}", statement);
             throw new RawStatementException(
                 "Failed to execute the supplied Cypher statement against the Neo4j endpoint.", exception);
         }
@@ -73,6 +95,7 @@ internal sealed class Neo4jCypherExecutor(Lazy<IDriver> driver, IGraphTransactio
         }
         catch (Exception exception)
         {
+            logger.LogWarning(exception, "Failed to execute Cypher statement: {Statement}", statement);
             throw new RawStatementException(
                 "Failed to execute the supplied Cypher statement against the Neo4j endpoint.", exception);
         }
@@ -97,10 +120,12 @@ internal sealed class Neo4jCypherExecutor(Lazy<IDriver> driver, IGraphTransactio
 
         if (transactionOpener.Active is Neo4jGraphTransaction ambient)
         {
+            logger.LogDebug("Executing Cypher within ambient transaction ({ParameterCount} parameters): {Statement}", parameters.Count, cypher);
             IResultCursor cursor = await ambient.Transaction.RunAsync(cypher, driverParameters).ConfigureAwait(false);
             return await MaterializeAsync(cursor, token).ConfigureAwait(false);
         }
 
+        logger.LogDebug("Executing Cypher in auto-commit session ({ParameterCount} parameters): {Statement}", parameters.Count, cypher);
         await using IAsyncSession session = driver.Value.AsyncSession();
         IResultCursor autoCursor = await session.RunAsync(cypher, driverParameters).ConfigureAwait(false);
         return await MaterializeAsync(autoCursor, token).ConfigureAwait(false);

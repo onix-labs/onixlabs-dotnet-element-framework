@@ -20,6 +20,8 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
+using Microsoft.Extensions.Logging;
+
 namespace OnixLabs.ElementFramework;
 
 /// <summary>
@@ -28,16 +30,45 @@ namespace OnixLabs.ElementFramework;
 /// <remarks>
 /// Flush is atomic. When no consumer-owned ambient transaction is active, an ambient transaction is auto-opened for the flush duration, every staged operation runs through it, and the transaction is committed on full success or rolled back on the first failure. When a consumer-owned ambient transaction is already active, operations execute within that transaction and lifecycle remains the consumer's responsibility. Pending operations are cleared only on success; on failure the original snapshot is preserved so a corrected retry can replay the full batch.
 /// </remarks>
-/// <param name="model">The frozen <see cref="IGraphModel"/> for the owning context's CLR type.</param>
-/// <param name="emitter">The provider's <see cref="IStatementEmitter"/>.</param>
-/// <param name="executor">The provider's <see cref="IRawStatementExecutor"/>.</param>
-/// <param name="opener">The provider's <see cref="IGraphTransactionOpener"/> used to detect or auto-open the ambient transaction that wraps a flush atomically.</param>
-internal sealed class ChangeTracker(
-    IGraphModel model,
-    IStatementEmitter emitter,
-    IRawStatementExecutor executor,
-    IGraphTransactionOpener opener) : IChangeTracker
+internal sealed class ChangeTracker : IChangeTracker
 {
+    /// <summary>The frozen graph model for the owning context's CLR type.</summary>
+    private readonly IGraphModel model;
+
+    /// <summary>The provider's statement emitter.</summary>
+    private readonly IStatementEmitter emitter;
+
+    /// <summary>The provider's raw statement executor.</summary>
+    private readonly IRawStatementExecutor executor;
+
+    /// <summary>The provider's transaction opener used to detect or auto-open the ambient transaction that wraps a flush.</summary>
+    private readonly IGraphTransactionOpener opener;
+
+    /// <summary>The logger this tracker writes diagnostic events to.</summary>
+    private readonly ILogger<ChangeTracker> logger;
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="ChangeTracker"/> class.
+    /// </summary>
+    /// <param name="model">The frozen <see cref="IGraphModel"/> for the owning context's CLR type.</param>
+    /// <param name="emitter">The provider's <see cref="IStatementEmitter"/>.</param>
+    /// <param name="executor">The provider's <see cref="IRawStatementExecutor"/>.</param>
+    /// <param name="opener">The provider's <see cref="IGraphTransactionOpener"/> used to detect or auto-open the ambient transaction that wraps a flush atomically.</param>
+    /// <param name="logger">The typed logger this tracker writes diagnostic events to. Pass <see cref="Microsoft.Extensions.Logging.Abstractions.NullLogger{T}.Instance"/> to disable logging.</param>
+    internal ChangeTracker(
+        IGraphModel model,
+        IStatementEmitter emitter,
+        IRawStatementExecutor executor,
+        IGraphTransactionOpener opener,
+        ILogger<ChangeTracker> logger)
+    {
+        this.model = model;
+        this.emitter = emitter;
+        this.executor = executor;
+        this.opener = opener;
+        this.logger = logger;
+    }
+
     /// <summary>
     /// The identity map of tracked instances keyed by CLR type and key value.
     /// </summary>
@@ -54,11 +85,13 @@ internal sealed class ChangeTracker(
         if (pending.Count == 0) return 0;
 
         List<Func<IStatementEmitter, IGraphModel, DataStatement>> snapshot = [.. pending];
+        logger.LogDebug("Flushing {OperationCount} pending operation(s).", snapshot.Count);
 
         if (opener.Active is not null)
         {
             int activeCount = ExecuteAll(snapshot);
             pending.Clear();
+            logger.LogDebug("Flushed {OperationCount} operation(s) within an ambient transaction.", activeCount);
             return activeCount;
         }
 
@@ -70,14 +103,16 @@ internal sealed class ChangeTracker(
             {
                 count = ExecuteAll(snapshot);
             }
-            catch
+            catch (Exception exception)
             {
+                logger.LogWarning(exception, "Flush failed; rolling back auto-opened transaction. {OperationCount} operation(s) remain pending for retry.", snapshot.Count);
                 transaction.Rollback();
                 throw;
             }
 
             transaction.Commit();
             pending.Clear();
+            logger.LogDebug("Flushed {OperationCount} operation(s) under auto-opened transaction.", count);
             return count;
         }
         finally
@@ -92,11 +127,13 @@ internal sealed class ChangeTracker(
         if (pending.Count == 0) return 0;
 
         List<Func<IStatementEmitter, IGraphModel, DataStatement>> snapshot = [.. pending];
+        logger.LogDebug("Flushing {OperationCount} pending operation(s) (async).", snapshot.Count);
 
         if (opener.Active is not null)
         {
             int activeCount = await ExecuteAllAsync(snapshot, token).ConfigureAwait(false);
             pending.Clear();
+            logger.LogDebug("Flushed {OperationCount} operation(s) within an ambient transaction (async).", activeCount);
             return activeCount;
         }
 
@@ -108,14 +145,16 @@ internal sealed class ChangeTracker(
             {
                 count = await ExecuteAllAsync(snapshot, token).ConfigureAwait(false);
             }
-            catch
+            catch (Exception exception)
             {
+                logger.LogWarning(exception, "Flush failed (async); rolling back auto-opened transaction. {OperationCount} operation(s) remain pending for retry.", snapshot.Count);
                 await transaction.RollbackAsync(token).ConfigureAwait(false);
                 throw;
             }
 
             await transaction.CommitAsync(token).ConfigureAwait(false);
             pending.Clear();
+            logger.LogDebug("Flushed {OperationCount} operation(s) under auto-opened transaction (async).", count);
             return count;
         }
         finally

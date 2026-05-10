@@ -20,6 +20,8 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
+using Microsoft.Extensions.Logging.Abstractions;
+
 namespace OnixLabs.ElementFramework.UnitTests;
 
 public class ChangeTrackerTests
@@ -29,7 +31,7 @@ public class ChangeTrackerTests
     private readonly FakeRawStatementExecutor executor = new();
     private readonly FakeGraphTransactionOpener opener = new();
 
-    private ChangeTracker NewTracker() => new(model, emitter, executor, opener);
+    private ChangeTracker NewTracker() => new(model, emitter, executor, opener, NullLogger<ChangeTracker>.Instance);
 
     [Fact(DisplayName = "TrackAdd stages an Add operation and records the node in the identity map")]
     public void TrackAddStagesAndIndexes()
@@ -114,7 +116,7 @@ public class ChangeTrackerTests
         builder.Node<StringKeyed>().HasKey(s => s.Identifier!);
         GraphModel stringModel = builder.Build();
 
-        ChangeTracker stringTracker = new(stringModel, emitter, executor, opener);
+        ChangeTracker stringTracker = new(stringModel, emitter, executor, opener, NullLogger<ChangeTracker>.Instance);
         StringKeyed instance = new() { Identifier = null, Body = "x" };
 
         GraphContextException exception = Assert.Throws<GraphContextException>(() => stringTracker.TrackAdd(instance));

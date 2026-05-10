@@ -21,6 +21,8 @@
 // SOFTWARE.
 
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace OnixLabs.ElementFramework;
 
@@ -68,6 +70,55 @@ public static class ServiceCollectionExtensions
     }
 
     /// <summary>
+    /// Registers a <see cref="GraphContext"/> subclass whose options are built per-resolve with access to the resolving <see cref="IServiceProvider"/>.
+    /// </summary>
+    /// <remarks>
+    /// Use this overload when the options builder needs to pull services from the container — most commonly the host's
+    /// <see cref="ILoggerFactory"/> to wire diagnostic logging:
+    /// <code>
+    /// services.AddGraphContext&lt;BlogGraphContext&gt;((sp, builder) =&gt;
+    ///     builder
+    ///         .UseLoggerFactory(sp.GetRequiredService&lt;ILoggerFactory&gt;())
+    ///         .UseNeo4j(connectionString, authToken));
+    /// </code>
+    /// The configure delegate is invoked once per resolve, so it must be cheap. Provider <c>Use*</c> extensions read the
+    /// configured <see cref="ILoggerFactory"/> from the builder at composition time, so <see cref="GraphContextOptionsBuilder.UseLoggerFactory"/>
+    /// must be called before the provider's <c>Use*</c> extension.
+    /// </remarks>
+    /// <typeparam name="TContext">The <see cref="GraphContext"/> subclass to register.</typeparam>
+    /// <param name="services">The <see cref="IServiceCollection"/> with which to register the context.</param>
+    /// <param name="configure">The action that configures the <see cref="GraphContextOptionsBuilder"/> with access to the resolving service provider.</param>
+    /// <param name="serviceKey">An optional key used to differentiate between multiple registrations of the same context type.</param>
+    /// <param name="lifetime">The lifetime with which to register the context.</param>
+    /// <returns>Returns the supplied <paramref name="services"/> to allow further chaining.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="services"/> or <paramref name="configure"/> is <see langword="null"/>.</exception>
+    /// <exception cref="InvalidOperationException">Thrown when one or more required provider services have not been supplied via <paramref name="configure"/>.</exception>
+    public static IServiceCollection AddGraphContext<TContext>(
+        this IServiceCollection services,
+        Action<IServiceProvider, GraphContextOptionsBuilder> configure,
+        object? serviceKey = null,
+        ServiceLifetime lifetime = ServiceLifetime.Scoped) where TContext : GraphContext
+    {
+        ArgumentNullException.ThrowIfNull(services);
+        ArgumentNullException.ThrowIfNull(configure);
+
+        ServiceDescriptor descriptor = serviceKey is null
+            ? new ServiceDescriptor(typeof(TContext), sp => Create(sp), lifetime)
+            : new ServiceDescriptor(typeof(TContext), serviceKey, (sp, _) => Create(sp), lifetime);
+
+        services.Add(descriptor);
+        return services;
+
+        TContext Create(IServiceProvider sp)
+        {
+            GraphContextOptionsBuilder builder = new();
+            configure(sp, builder);
+            GraphContextOptions options = builder.Build(BuildGraphContextServices);
+            return (TContext)ActivatorUtilities.CreateInstance<TContext>(sp, options);
+        }
+    }
+
+    /// <summary>
     /// Composes the per-context <see cref="GraphContextServices"/> bundle from the resolved model and configured provider services.
     /// </summary>
     /// <param name="context">The <see cref="GraphContext"/> being initialised.</param>
@@ -76,8 +127,9 @@ public static class ServiceCollectionExtensions
     private static GraphContextServices BuildGraphContextServices(GraphContext context, GraphContextOptions options)
     {
         IGraphModel model = ModelSource.ModelFor(context);
+        ILogger<ChangeTracker> changeTrackerLogger = options.LoggerFactory?.CreateLogger<ChangeTracker>() ?? NullLogger<ChangeTracker>.Instance;
         ChangeTracker changeTracker = new(
-            model, options.StatementEmitter, options.RawStatementExecutor, options.GraphTransactionOpener);
+            model, options.StatementEmitter, options.RawStatementExecutor, options.GraphTransactionOpener, changeTrackerLogger);
         GraphSetFactory setFactory = new(
             model, changeTracker, options.StatementEmitter, options.RawStatementExecutor, options.ResultMaterializer);
         GraphTransactionFactory transactionFactory = new(options.GraphTransactionOpener, changeTracker);
