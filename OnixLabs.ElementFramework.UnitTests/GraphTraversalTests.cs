@@ -245,7 +245,7 @@ public class GraphTraversalTests
     public void ReturnForwardsTranslatorRows()
     {
         GraphTraversal traversal = NewTraversal();
-        Author alice = new() { Id = Guid.NewGuid(), Name = "Alice" };
+        Author alice = Author.Create("Alice");
         translator.OnTranslate = _ => [alice];
 
         IEnumerable<Author> rows = traversal.Match().Node<Author>("a").Return<Author>("a");
@@ -257,7 +257,7 @@ public class GraphTraversalTests
     public async Task ReturnAsyncForwardsTranslatorRows()
     {
         GraphTraversal traversal = NewTraversal();
-        Author alice = new() { Id = Guid.NewGuid(), Name = "Alice" };
+        Author alice = Author.Create("Alice");
         translator.OnTranslate = _ => [alice];
 
         List<Author> collected = [];

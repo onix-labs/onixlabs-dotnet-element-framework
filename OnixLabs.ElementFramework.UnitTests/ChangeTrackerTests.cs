@@ -37,7 +37,7 @@ public class ChangeTrackerTests
     public void TrackAddStagesAndIndexes()
     {
         ChangeTracker tracker = NewTracker();
-        Author author = new() { Id = Guid.NewGuid(), Name = "Alice" };
+        Author author = Author.Create("Alice");
 
         tracker.TrackAdd(author);
 
@@ -55,8 +55,8 @@ public class ChangeTrackerTests
     {
         ChangeTracker tracker = NewTracker();
         Guid id = Guid.NewGuid();
-        Author original = new() { Id = id, Name = "Alice" };
-        Author replacement = new() { Id = id, Name = "Bob" };
+        Author original = new() { Id = id, Name = "Alice", JoinedAt = DateTimeOffset.UtcNow };
+        Author replacement = new() { Id = id, Name = "Bob", JoinedAt = DateTimeOffset.UtcNow };
 
         tracker.TrackAdd(original);
         tracker.TrackUpdate(replacement);
@@ -69,7 +69,7 @@ public class ChangeTrackerTests
     public void TrackRemoveDropsFromIdentityMap()
     {
         ChangeTracker tracker = NewTracker();
-        Author author = new() { Id = Guid.NewGuid(), Name = "Alice" };
+        Author author = Author.Create("Alice");
 
         tracker.TrackAdd(author);
         Assert.NotNull(tracker.Find<Author>(author.Id));
@@ -83,7 +83,7 @@ public class ChangeTrackerTests
     public void TrackMergeStagesAndIndexes()
     {
         ChangeTracker tracker = NewTracker();
-        Author author = new() { Id = Guid.NewGuid(), Name = "Alice" };
+        Author author = Author.Create("Alice");
 
         tracker.TrackMerge(author);
 
@@ -102,7 +102,7 @@ public class ChangeTrackerTests
     public void TrackingDefaultGuidKeySucceeds()
     {
         ChangeTracker tracker = NewTracker();
-        Post post = new() { Id = default, Title = "x" };
+        Post post = new() { Id = default, Title = "x", Body = "y", PublishedAt = DateTimeOffset.UtcNow };
 
         tracker.TrackAdd(post);
 
@@ -127,8 +127,8 @@ public class ChangeTrackerTests
     public void TrackConnectStages()
     {
         ChangeTracker tracker = NewTracker();
-        Author author = new() { Id = Guid.NewGuid(), Name = "Alice" };
-        Post post = new() { Id = Guid.NewGuid(), Title = "Hi" };
+        Author author = Author.Create("Alice");
+        Post post = Post.Create("Hi", "Body");
         Wrote edge = new() { WrittenAt = DateTimeOffset.UtcNow };
 
         tracker.TrackConnect(author, edge, post);
@@ -143,8 +143,8 @@ public class ChangeTrackerTests
     public void TrackDisconnectStages()
     {
         ChangeTracker tracker = NewTracker();
-        Author author = new() { Id = Guid.NewGuid(), Name = "Alice" };
-        Post post = new() { Id = Guid.NewGuid(), Title = "Hi" };
+        Author author = Author.Create("Alice");
+        Post post = Post.Create("Hi", "Body");
 
         tracker.TrackDisconnect<Author, Wrote, Post>(author, post);
         int flushed = tracker.Flush();
@@ -166,7 +166,7 @@ public class ChangeTrackerTests
     public void ResetClearsIdentityMap()
     {
         ChangeTracker tracker = NewTracker();
-        Author author = new() { Id = Guid.NewGuid(), Name = "Alice" };
+        Author author = Author.Create("Alice");
         tracker.TrackAdd(author);
         Assert.NotNull(tracker.Find<Author>(author.Id));
 
@@ -179,7 +179,7 @@ public class ChangeTrackerTests
     public void ResetClearsPendingQueue()
     {
         ChangeTracker tracker = NewTracker();
-        tracker.TrackAdd(new Author { Id = Guid.NewGuid(), Name = "Alice" });
+        tracker.TrackAdd(Author.Create("Alice"));
 
         tracker.Reset();
         int flushed = tracker.Flush();
@@ -192,7 +192,7 @@ public class ChangeTrackerTests
     public void AttachIndexesWithoutStaging()
     {
         ChangeTracker tracker = NewTracker();
-        Author author = new() { Id = Guid.NewGuid(), Name = "Alice" };
+        Author author = Author.Create("Alice");
 
         tracker.Attach(author);
 
@@ -207,7 +207,7 @@ public class ChangeTrackerTests
     public void AttachIsIdempotentForSameReference()
     {
         ChangeTracker tracker = NewTracker();
-        Author author = new() { Id = Guid.NewGuid(), Name = "Alice" };
+        Author author = Author.Create("Alice");
 
         tracker.Attach(author);
         tracker.Attach(author);
@@ -220,8 +220,8 @@ public class ChangeTrackerTests
     {
         ChangeTracker tracker = NewTracker();
         Guid id = Guid.NewGuid();
-        Author first = new() { Id = id, Name = "Alice" };
-        Author second = new() { Id = id, Name = "Alice (copy)" };
+        Author first = new() { Id = id, Name = "Alice", JoinedAt = DateTimeOffset.UtcNow };
+        Author second = new() { Id = id, Name = "Alice (copy)", JoinedAt = DateTimeOffset.UtcNow };
 
         tracker.Attach(first);
 
@@ -243,9 +243,9 @@ public class ChangeTrackerTests
     public void FlushHappyPathReturnsCount()
     {
         ChangeTracker tracker = NewTracker();
-        tracker.TrackAdd(new Author { Id = Guid.NewGuid(), Name = "Alice" });
-        tracker.TrackAdd(new Author { Id = Guid.NewGuid(), Name = "Bob" });
-        tracker.TrackAdd(new Author { Id = Guid.NewGuid(), Name = "Carol" });
+        tracker.TrackAdd(Author.Create("Alice"));
+        tracker.TrackAdd(Author.Create("Bob"));
+        tracker.TrackAdd(Author.Create("Carol"));
 
         int flushed = tracker.Flush();
 
@@ -257,8 +257,8 @@ public class ChangeTrackerTests
     public async Task FlushAsyncHappyPathReturnsCount()
     {
         ChangeTracker tracker = NewTracker();
-        tracker.TrackAdd(new Author { Id = Guid.NewGuid(), Name = "Alice" });
-        tracker.TrackAdd(new Author { Id = Guid.NewGuid(), Name = "Bob" });
+        tracker.TrackAdd(Author.Create("Alice"));
+        tracker.TrackAdd(Author.Create("Bob"));
 
         int flushed = await tracker.FlushAsync();
 
@@ -270,8 +270,8 @@ public class ChangeTrackerTests
     public void FlushAutoOpensAndCommits()
     {
         ChangeTracker tracker = NewTracker();
-        tracker.TrackAdd(new Author { Id = Guid.NewGuid(), Name = "Alice" });
-        tracker.TrackAdd(new Author { Id = Guid.NewGuid(), Name = "Bob" });
+        tracker.TrackAdd(Author.Create("Alice"));
+        tracker.TrackAdd(Author.Create("Bob"));
 
         int flushed = tracker.Flush();
 
@@ -287,9 +287,9 @@ public class ChangeTrackerTests
     public void FlushPartialFailureRollsBackAndPreservesPending()
     {
         ChangeTracker tracker = NewTracker();
-        tracker.TrackAdd(new Author { Id = Guid.NewGuid(), Name = "Alice" });
-        tracker.TrackAdd(new Author { Id = Guid.NewGuid(), Name = "Bob" });
-        tracker.TrackAdd(new Author { Id = Guid.NewGuid(), Name = "Carol" });
+        tracker.TrackAdd(Author.Create("Alice"));
+        tracker.TrackAdd(Author.Create("Bob"));
+        tracker.TrackAdd(Author.Create("Carol"));
 
         int callCount = 0;
         executor.OnExecute = _ =>
@@ -314,8 +314,8 @@ public class ChangeTrackerTests
     public void FlushHonoursExistingAmbientTransaction()
     {
         ChangeTracker tracker = NewTracker();
-        tracker.TrackAdd(new Author { Id = Guid.NewGuid(), Name = "Alice" });
-        tracker.TrackAdd(new Author { Id = Guid.NewGuid(), Name = "Bob" });
+        tracker.TrackAdd(Author.Create("Alice"));
+        tracker.TrackAdd(Author.Create("Bob"));
 
         IGraphTransaction ambient = opener.Open();
         Assert.Same(ambient, opener.Active);
@@ -330,8 +330,8 @@ public class ChangeTrackerTests
     public void FlushWithinAmbientTransactionPreservesPendingOnFailure()
     {
         ChangeTracker tracker = NewTracker();
-        tracker.TrackAdd(new Author { Id = Guid.NewGuid(), Name = "Alice" });
-        tracker.TrackAdd(new Author { Id = Guid.NewGuid(), Name = "Bob" });
+        tracker.TrackAdd(Author.Create("Alice"));
+        tracker.TrackAdd(Author.Create("Bob"));
 
         opener.Open();
 

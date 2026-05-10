@@ -27,6 +27,7 @@ public sealed class Author
     public Guid Id { get; init; }
     public required string Name { get; set; }
     public required DateTimeOffset JoinedAt { get; init; }
+    public string? Bio { get; set; }
 
     public static Author Create(string name) => new()
     {

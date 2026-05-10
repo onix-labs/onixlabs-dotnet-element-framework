@@ -22,53 +22,44 @@
 
 namespace OnixLabs.ElementFramework.UnitTests;
 
-internal sealed class Author
-{
-    public Guid Id { get; set; }
-    public string Name { get; set; } = "";
-    public int Age { get; set; }
-}
-
-internal sealed class Post
-{
-    public Guid Id { get; set; }
-    public string Title { get; set; } = "";
-}
-
-internal sealed class Comment
-{
-    public Guid Id { get; set; }
-    public string Body { get; set; } = "";
-}
-
-internal sealed class Wrote
-{
-    public DateTimeOffset WrittenAt { get; set; }
-}
-
-internal sealed class CommentOn;
-
+/// <summary>
+/// Negative-test fixture: a CLR type intentionally never registered in the model so that tests can verify the framework
+/// raises the right exception when a consumer references an unknown type. This concept doesn't belong in the
+/// blog-application Conformance fixtures because there it would just be dead code.
+/// </summary>
 internal sealed class Unregistered
 {
     public Guid Id { get; set; }
 }
 
+/// <summary>
+/// Negative-test fixture: a CLR type whose configured key is a nullable string so that tests can verify the framework
+/// rejects a null key value at track time. Also doesn't belong in Conformance — the canonical blog domain uses
+/// <see cref="Guid"/> keys on every node.
+/// </summary>
 internal sealed class StringKeyed
 {
     public string? Identifier { get; set; }
     public string Body { get; set; } = "";
 }
 
+/// <summary>
+/// Shared model used by the abstraction-layer unit tests. Registers the canonical blog-application fixtures from the
+/// <c>OnixLabs.ElementFramework.Conformance</c> project via their configuration classes so the domain model stays in
+/// one place across the test suite.
+/// </summary>
 internal static class TestModel
 {
     public static GraphModel Build()
     {
         GraphModelBuilder builder = new();
-        builder.Node<Author>().HasKey(a => a.Id);
-        builder.Node<Post>().HasKey(p => p.Id);
-        builder.Node<Comment>().HasKey(c => c.Id);
-        builder.Relationship<Author, Wrote, Post>();
-        builder.Relationship<Comment, CommentOn, Post>();
+        builder
+            .ApplyConfiguration(new AuthorConfiguration())
+            .ApplyConfiguration(new PostConfiguration())
+            .ApplyConfiguration(new CommentConfiguration())
+            .ApplyConfiguration(new WroteConfiguration())
+            .ApplyConfiguration(new CommentOnConfiguration())
+            .ApplyConfiguration(new ReplyToConfiguration());
         return builder.Build();
     }
 }

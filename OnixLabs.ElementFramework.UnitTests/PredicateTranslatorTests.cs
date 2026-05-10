@@ -67,19 +67,21 @@ public class PredicateTranslatorTests
     [Fact(DisplayName = "Translates property < constant")]
     public void TranslatesPropertyLessThanConstant()
     {
-        Expression<Func<Author, bool>> predicate = a => a.Age < 30;
+        DateTimeOffset cutoff = new(2026, 1, 1, 0, 0, 0, TimeSpan.Zero);
+        Expression<Func<Author, bool>> predicate = a => a.JoinedAt < cutoff;
 
         PropertyComparisonPredicate result = Assert.IsType<PropertyComparisonPredicate>(
             PredicateTranslator.Translate("a", predicate));
 
         Assert.Equal(ComparisonOperator.LessThan, result.Operator);
-        Assert.Equal(30, result.Value);
+        Assert.Equal(cutoff, result.Value);
     }
 
     [Fact(DisplayName = "Translates property <= constant")]
     public void TranslatesPropertyLessThanOrEqualConstant()
     {
-        Expression<Func<Author, bool>> predicate = a => a.Age <= 30;
+        DateTimeOffset cutoff = new(2026, 1, 1, 0, 0, 0, TimeSpan.Zero);
+        Expression<Func<Author, bool>> predicate = a => a.JoinedAt <= cutoff;
 
         PropertyComparisonPredicate result = Assert.IsType<PropertyComparisonPredicate>(
             PredicateTranslator.Translate("a", predicate));
@@ -90,7 +92,8 @@ public class PredicateTranslatorTests
     [Fact(DisplayName = "Translates property > constant")]
     public void TranslatesPropertyGreaterThanConstant()
     {
-        Expression<Func<Author, bool>> predicate = a => a.Age > 30;
+        DateTimeOffset cutoff = new(2026, 1, 1, 0, 0, 0, TimeSpan.Zero);
+        Expression<Func<Author, bool>> predicate = a => a.JoinedAt > cutoff;
 
         PropertyComparisonPredicate result = Assert.IsType<PropertyComparisonPredicate>(
             PredicateTranslator.Translate("a", predicate));
@@ -101,7 +104,8 @@ public class PredicateTranslatorTests
     [Fact(DisplayName = "Translates property >= constant")]
     public void TranslatesPropertyGreaterThanOrEqualConstant()
     {
-        Expression<Func<Author, bool>> predicate = a => a.Age >= 30;
+        DateTimeOffset cutoff = new(2026, 1, 1, 0, 0, 0, TimeSpan.Zero);
+        Expression<Func<Author, bool>> predicate = a => a.JoinedAt >= cutoff;
 
         PropertyComparisonPredicate result = Assert.IsType<PropertyComparisonPredicate>(
             PredicateTranslator.Translate("a", predicate));
@@ -112,13 +116,14 @@ public class PredicateTranslatorTests
     [Fact(DisplayName = "Flips the operator when the property is on the right of an ordered comparison")]
     public void FlipsOperatorWhenPropertyOnRight()
     {
-        Expression<Func<Author, bool>> predicate = a => 30 < a.Age;
+        DateTimeOffset cutoff = new(2026, 1, 1, 0, 0, 0, TimeSpan.Zero);
+        Expression<Func<Author, bool>> predicate = a => cutoff < a.JoinedAt;
 
         PropertyComparisonPredicate result = Assert.IsType<PropertyComparisonPredicate>(
             PredicateTranslator.Translate("a", predicate));
 
         Assert.Equal(ComparisonOperator.GreaterThan, result.Operator);
-        Assert.Equal(30, result.Value);
+        Assert.Equal(cutoff, result.Value);
     }
 
     [Fact(DisplayName = "Translates property == captured-variable by compiling and invoking the value side")]
@@ -157,7 +162,8 @@ public class PredicateTranslatorTests
     [Fact(DisplayName = "Translates && into AndPredicate")]
     public void TranslatesAndAlsoIntoAndPredicate()
     {
-        Expression<Func<Author, bool>> predicate = a => a.Name == "Alice" && a.Age > 30;
+        DateTimeOffset cutoff = new(2026, 1, 1, 0, 0, 0, TimeSpan.Zero);
+        Expression<Func<Author, bool>> predicate = a => a.Name == "Alice" && a.JoinedAt > cutoff;
 
         AndPredicate result = Assert.IsType<AndPredicate>(PredicateTranslator.Translate("a", predicate));
 
@@ -223,8 +229,9 @@ public class PredicateTranslatorTests
     [Fact(DisplayName = "Composes nested boolean operators into a faithful tree")]
     public void ComposesNestedBooleanOperators()
     {
+        DateTimeOffset cutoff = new(2026, 1, 1, 0, 0, 0, TimeSpan.Zero);
         Expression<Func<Author, bool>> predicate = a =>
-            (a.Name == "Alice" || a.Name == "Bob") && a.Age > 30;
+            (a.Name == "Alice" || a.Name == "Bob") && a.JoinedAt > cutoff;
 
         AndPredicate root = Assert.IsType<AndPredicate>(PredicateTranslator.Translate("a", predicate));
 
@@ -232,8 +239,8 @@ public class PredicateTranslatorTests
         Assert.Equal("Alice", Assert.IsType<PropertyComparisonPredicate>(or.Left).Value);
         Assert.Equal("Bob", Assert.IsType<PropertyComparisonPredicate>(or.Right).Value);
 
-        PropertyComparisonPredicate age = Assert.IsType<PropertyComparisonPredicate>(root.Right);
-        Assert.Equal(ComparisonOperator.GreaterThan, age.Operator);
+        PropertyComparisonPredicate joinedAt = Assert.IsType<PropertyComparisonPredicate>(root.Right);
+        Assert.Equal(ComparisonOperator.GreaterThan, joinedAt.Operator);
     }
 
     [Fact(DisplayName = "Throws NotSupportedException when neither side is a parameter property access")]

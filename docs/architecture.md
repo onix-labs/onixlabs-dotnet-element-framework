@@ -659,9 +659,11 @@ The translator deliberately doesn't go through `IStatementEmitter` — there'd b
 
 Three test projects mirror the three places functionality lives.
 
-### 11.1 Unit tests: `OnixLabs.ElementFramework.UnitTests`
+### 11.1 Unit tests
 
-xUnit tests against the default implementation. Cover:
+Two unit-test projects cover the pure code.
+
+**`OnixLabs.ElementFramework.UnitTests`** — xUnit tests against the default implementation. Cover:
 
 - `ChangeTracker` — staging, identity map, flush atomicity, auto-open vs ambient routing, reset, partial-failure pending preservation.
 - `GraphModel` / `GraphModelBuilder` — validation, ignored properties, label collisions, key resolution.
@@ -673,7 +675,15 @@ xUnit tests against the default implementation. Cover:
 
 The fixture file `TestFixtures.cs` ships a tiny `Author`/`Post`/`Comment` plus `Wrote`/`CommentOn` model plus fakes for every provider seam (`FakeStatementEmitter`, `FakeRawStatementExecutor`, `FakeGraphTransactionOpener`, `FakeTraversalTranslator`, `FakeResultMaterializer`), letting every unit test inject any subset of the provider contract.
 
-These tests run without any external dependency.
+**`OnixLabs.ElementFramework.Neo4j.UnitTests`** — xUnit tests against the Neo4j provider's pure functions. Cover:
+
+- `CypherIdentifier.Escape` — bare-identifier passthrough, reserved-word backtick-quoting (case-insensitive), non-bare quoting, embedded-backtick doubling, null/empty rejection.
+- `PropertySerializer.Serialize` — `Guid` → string, `DateTimeOffset` → `ZonedDateTime`, enum → name, primitives and `DateTime` passthrough, null passthrough.
+- `ParameterBinder` — `$`-prefixed token on first use, collision resolution with `_N` suffix, deterministic ordering, `ToParameters` snapshot, blank-name rejection.
+- `CypherEmitter` — every emit method (`EmitAdd`/`EmitUpdate`/`EmitRemove`/`EmitMerge`/`EmitConnect`/`EmitDisconnect`/`EmitFindById`/`EmitExists`/`EmitAsEnumerableNodes`/`EmitAsEnumerableEdges`) plus full `EmitTraversal` coverage of pattern direction emission, every comparison and string-comparison operator, null predicates, And/Or/Not parenthesisation, top-level conjunction joining, and the AST-validation throws.
+- `Neo4jResultMaterializer` — `Guid`/`DateTimeOffset`/enum conversions, primitive and long→int passthrough, nullable `Guid?`, default-on-missing properties, INode/IRelationship type assertions, alias-free and alias-bearing materialize methods, `ReadExists` with positive/zero/negative/non-long/missing counts. Uses inline fake `INode`/`IRelationship` implementations.
+
+Both projects run without any external dependency.
 
 ### 11.2 Conformance suite: `OnixLabs.ElementFramework.Conformance`
 
@@ -694,7 +704,7 @@ The in-memory project additionally skips four conformance tests that assert on r
 
 ### 11.4 CI
 
-`.github/workflows/ci.yml` runs three steps in sequence: build → unit tests → in-memory conformance → Neo4j conformance (the in-memory pass fails fast on a provider regression before Docker is even started, shaving minutes off failed PRs). The publish step packs all four NuGet artefacts.
+`.github/workflows/ci.yml` runs four test steps in sequence: build → abstraction unit tests → Neo4j-provider unit tests → in-memory conformance → Neo4j conformance (the unit and in-memory passes fail fast on a regression before Docker is even started, shaving minutes off failed PRs). The publish step packs all four NuGet artefacts.
 
 ---
 

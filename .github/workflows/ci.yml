@@ -49,6 +49,13 @@ jobs:
           --no-build
           --verbosity normal
 
+      - name: Run Neo4j provider unit tests
+        run: >
+          dotnet test OnixLabs.ElementFramework.Neo4j.UnitTests/OnixLabs.ElementFramework.Neo4j.UnitTests.csproj
+          --configuration Release
+          --no-build
+          --verbosity normal
+
       - name: Run in-memory conformance tests
         run: >
           dotnet test OnixLabs.ElementFramework.InMemory.IntegrationTests/OnixLabs.ElementFramework.InMemory.IntegrationTests.csproj
