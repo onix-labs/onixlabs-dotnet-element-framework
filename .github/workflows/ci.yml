@@ -1,0 +1,180 @@
+name: CI
+
+on:
+  push:
+    branches: ['**']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build-and-test:
+    name: Build and test
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: |
+            8.0.x
+            9.0.x
+            10.0.x
+
+      - name: Cache NuGet packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj', 'Directory.Build.props') }}
+          restore-keys: |
+            nuget-${{ runner.os }}-
+
+      - name: Restore
+        run: dotnet restore
+
+      - name: Build
+        run: dotnet build --configuration Release --no-restore
+
+      - name: Run unit tests
+        run: >
+          dotnet test OnixLabs.ElementFramework.UnitTests/OnixLabs.ElementFramework.UnitTests.csproj
+          --configuration Release
+          --no-build
+          --verbosity normal
+
+      - name: Run integration tests
+        run: >
+          dotnet test OnixLabs.ElementFramework.Neo4j.IntegrationTests/OnixLabs.ElementFramework.Neo4j.IntegrationTests.csproj
+          --configuration Release
+          --no-build
+          --verbosity normal
+
+  publish:
+    name: Publish
+    needs: build-and-test
+    if: github.ref == 'refs/heads/release'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: nuget-publish
+    permissions:
+      contents: write
+      packages: write
+      id-token: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: |
+            8.0.x
+            9.0.x
+            10.0.x
+
+      - name: Cache NuGet packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj', 'Directory.Build.props') }}
+          restore-keys: |
+            nuget-${{ runner.os }}-
+
+      - name: Resolve version from Directory.Build.props
+        id: version
+        run: |
+          VERSION=$(sed -nE 's|.*<Version>([^<]+)</Version>.*|\1|p' Directory.Build.props | head -n1)
+          if [[ -z "$VERSION" ]]; then
+            echo "::error file=Directory.Build.props::Could not parse <Version> from Directory.Build.props"
+            exit 1
+          fi
+          echo "Resolved version: ${VERSION}"
+          echo "VERSION=${VERSION}" >> "$GITHUB_OUTPUT"
+
+      - name: Verify tag does not already exist
+        env:
+          VERSION: ${{ steps.version.outputs.VERSION }}
+        run: |
+          if git ls-remote --tags origin "refs/tags/${VERSION}" | grep -qE "refs/tags/${VERSION}$"; then
+            echo "::error::Tag '${VERSION}' already exists on origin. Bump <Version> in Directory.Build.props before merging to release."
+            exit 1
+          fi
+
+      - name: Verify version is not already on nuget.org
+        env:
+          VERSION: ${{ steps.version.outputs.VERSION }}
+        run: |
+          set -e
+          for pkg in onixlabs.elementframework onixlabs.elementframework.abstractions onixlabs.elementframework.neo4j; do
+            url="https://api.nuget.org/v3-flatcontainer/${pkg}/${VERSION}/${pkg}.nuspec"
+            status=$(curl -s -o /dev/null -w '%{http_code}' "${url}")
+            if [[ "${status}" == "200" ]]; then
+              echo "::error::Version ${VERSION} of ${pkg} is already published to nuget.org."
+              exit 1
+            fi
+          done
+
+      - name: Pack
+        env:
+          VERSION: ${{ steps.version.outputs.VERSION }}
+        run: |
+          for proj in OnixLabs.ElementFramework.Abstractions OnixLabs.ElementFramework OnixLabs.ElementFramework.Neo4j; do
+            dotnet pack "${proj}/${proj}.csproj" \
+              --configuration Release \
+              --output ./artifacts \
+              -p:Version=${VERSION} \
+              -p:ContinuousIntegrationBuild=true
+          done
+          ls -la ./artifacts
+
+      - name: Push to GitHub Packages
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: >
+          dotnet nuget push "./artifacts/*.nupkg"
+          --source https://nuget.pkg.github.com/onix-labs/index.json
+          --api-key "${GITHUB_TOKEN}"
+          --no-symbols
+
+      - name: Authenticate to NuGet.org via Trusted Publishing
+        id: nuget-login
+        uses: NuGet/login@v1
+        with:
+          user: ${{ vars.NUGET_OWNER }}
+
+      - name: Push to nuget.org
+        env:
+          NUGET_API_KEY: ${{ steps.nuget-login.outputs.NUGET_API_KEY }}
+        run: >
+          dotnet nuget push "./artifacts/*.nupkg"
+          --source https://api.nuget.org/v3/index.json
+          --api-key "${NUGET_API_KEY}"
+
+      - name: Tag release
+        env:
+          VERSION: ${{ steps.version.outputs.VERSION }}
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git tag "${VERSION}"
+          git push origin "${VERSION}"
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ steps.version.outputs.VERSION }}
+        run: >
+          gh release create "${VERSION}"
+          ./artifacts/*.nupkg
+          ./artifacts/*.snupkg
+          --title "${VERSION}"
+          --generate-notes
