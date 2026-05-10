@@ -21,26 +21,15 @@
 // SOFTWARE.
 
 using Microsoft.Extensions.DependencyInjection;
-using Neo4j.Driver;
 using OnixLabs.ElementFramework.Neo4j.IntegrationTests.TestFixtures.BlogApplication;
-using Testcontainers.Neo4j;
 using Xunit.Abstractions;
 
 namespace OnixLabs.ElementFramework.Neo4j.IntegrationTests;
 
-public sealed class Neo4jGraphContextIntegrationTests(ITestOutputHelper output) : AbstractGraphContextIntegrationTests(output)
+public sealed class Neo4jGraphContextIntegrationTests(ITestOutputHelper output, Neo4jFixture fixture)
+    : AbstractGraphContextIntegrationTests(output), IClassFixture<Neo4jFixture>
 {
-    private readonly Neo4jContainer neo4jContainer = new Neo4jBuilder("neo4j:5.26-community").Build();
-
     protected override void ConfigureServices(IServiceCollection services) =>
         services.AddGraphContext<BlogGraphContext>(builder =>
-            builder.UseNeo4j(() => neo4jContainer.GetConnectionString(), AuthTokens.None));
-
-    protected override Task OnInitializeAsync() => GraphContainer.InitializeAsync(
-        container: neo4jContainer,
-        boltUriFactory: () => new Uri(neo4jContainer.GetConnectionString()),
-        authToken: AuthTokens.None,
-        output: Output);
-
-    protected override Task OnDisposeAsync() => GraphContainer.FinalizeAsync(neo4jContainer, Output);
+            builder.UseNeo4j(() => fixture.ConnectionString, fixture.AuthToken));
 }

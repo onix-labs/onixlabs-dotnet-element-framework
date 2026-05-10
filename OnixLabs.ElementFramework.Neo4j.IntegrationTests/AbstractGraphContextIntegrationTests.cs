@@ -30,6 +30,16 @@ public abstract class AbstractGraphContextIntegrationTests(ITestOutputHelper out
 {
     private BlogGraphContext Context => Scope.GetRequiredService<BlogGraphContext>();
 
+    /// <summary>
+    /// Wipes the shared graph before each test so that tests in the same class do not bleed state into each other.
+    /// </summary>
+    /// <returns>Returns a task that completes once the graph has been reset.</returns>
+    protected override Task OnInitializeAsync()
+    {
+        _ = Context.RawStatement.Execute("MATCH (n) DETACH DELETE n", new Dictionary<string, object?>());
+        return Task.CompletedTask;
+    }
+
     [Fact(DisplayName = "Nodes.Add followed by SaveChanges should add a node")]
     public void NodesAddShouldAddANode()
     {
