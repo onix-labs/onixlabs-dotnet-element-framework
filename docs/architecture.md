@@ -13,10 +13,11 @@ A comprehensive tour of the Element Framework, starting from the highest-level v
 7. [Traversal layer](#7-traversal-layer)
 8. [Lifecycles](#8-lifecycles)
 9. [Neo4j provider](#9-neo4j-provider)
-10. [In-memory provider](#10-in-memory-provider)
-11. [Testing architecture](#11-testing-architecture)
-12. [Adding a new provider](#12-adding-a-new-provider)
-13. [Known constraints and non-goals](#13-known-constraints-and-non-goals)
+10. [Apache AGE provider](#10-apache-age-provider)
+11. [In-memory provider](#11-in-memory-provider)
+12. [Testing architecture](#12-testing-architecture)
+13. [Adding a new provider](#13-adding-a-new-provider)
+14. [Known constraints and non-goals](#14-known-constraints-and-non-goals)
 
 ---
 
@@ -36,7 +37,7 @@ Three big-picture qualities to keep in mind while reading the rest of this docum
 
 ## 2. Solution layout
 
-The solution is four production projects plus three test projects.
+The solution is five production projects plus five test projects.
 
 ```
 onixlabs-dotnet-element-framework/
@@ -44,15 +45,22 @@ onixlabs-dotnet-element-framework/
 ├── OnixLabs.ElementFramework/                - Default implementation: change tracker,
 │                                               model builder, sets, traversal pipeline,
 │                                               DI registration.
-├── OnixLabs.ElementFramework.Neo4j/          - First-class Cypher provider.
+├── OnixLabs.ElementFramework.Neo4j/          - Cypher-over-Bolt provider (reference).
+├── OnixLabs.ElementFramework.AGE/            - Cypher-over-Npgsql provider for Apache
+│                                               AGE on PostgreSQL.
 ├── OnixLabs.ElementFramework.InMemory/       - In-process provider (tests, demos).
 │
 ├── OnixLabs.ElementFramework.UnitTests/             - Unit tests for the default impl.
+├── OnixLabs.ElementFramework.Neo4j.UnitTests/       - Unit tests for the Neo4j provider's
+│                                                      pure functions.
 ├── OnixLabs.ElementFramework.Conformance/           - Provider-agnostic integration
 │                                                      tests; subclassed per provider.
 ├── OnixLabs.ElementFramework.InMemory.IntegrationTests/  - Conformance against in-mem.
-└── OnixLabs.ElementFramework.Neo4j.IntegrationTests/     - Conformance against Neo4j
-                                                            via Testcontainers.
+├── OnixLabs.ElementFramework.Neo4j.IntegrationTests/     - Conformance against Neo4j
+│                                                           via Testcontainers.
+└── OnixLabs.ElementFramework.AGE.IntegrationTests/       - Conformance + reconnaissance
+                                                            against Apache AGE via
+                                                            Testcontainers.
 ```
 
 **Dependency direction is strictly inward.** `OnixLabs.ElementFramework` references `Abstractions`. Each provider references `OnixLabs.ElementFramework` (which transitively pulls `Abstractions`). Provider-to-provider references do not exist; the conformance test project depends only on `OnixLabs.ElementFramework`.
@@ -331,7 +339,7 @@ public sealed record TraversalAst(
 
 The segments list alternates `NodePatternSegment` and `RelationshipPatternSegment` and always begins with a node. A `RelationshipPatternSegment` carries an alias, the edge CLR type, and a `RelationshipDirection` (`Outgoing | Incoming | Either`).
 
-The AST is intentionally **linear, not tree-shaped**, because Cypher patterns are linear. This is one of the architectural choices that scopes the framework to Cypher-family stores by design — see [§13](#13-known-constraints-and-non-goals).
+The AST is intentionally **linear, not tree-shaped**, because Cypher patterns are linear. This is one of the architectural choices that scopes the framework to Cypher-family stores by design — see [§14](#14-known-constraints-and-non-goals).
 
 ### 7.3 The predicate tree
 
@@ -495,7 +503,7 @@ A process-wide `ConcurrentDictionary<DriverKey, IDriver>` keyed by `(connectionS
 
 Auth-token equality is reference-based because `IAuthToken` doesn't override equality; two callers building separate `AuthTokens.Basic(...)` objects against the same credentials will create two drivers. In production this is fine (the connection string and auth are constructed once); in tests it's a non-issue because each Testcontainer has a unique connection string.
 
-The cache has no eviction — see [§13](#13-known-constraints-and-non-goals).
+The cache has no eviction — see [§14](#14-known-constraints-and-non-goals).
 
 ### 9.3 Cypher emission: `CypherEmitter`, `CypherIdentifier`, `ParameterBinder`, `PropertySerializer`
 
@@ -563,11 +571,99 @@ The sync path materializes eagerly; the async path is a proper async iterator th
 
 ---
 
-## 10. In-memory provider
+## 10. Apache AGE provider
 
-A second concrete provider whose entire database is a process-resident `Dictionary` + `List` pair. Lives in `OnixLabs.ElementFramework.InMemory`. It serves two purposes: an integration-test double for downstream applications, and the second provider that validates the abstraction's portability story.
+The portability proof. Lives in `OnixLabs.ElementFramework.AGE` and depends on `Npgsql` 9.x. AGE is a PostgreSQL extension that adds an openCypher-compatible graph engine to a relational database; queries are issued as SQL that wraps Cypher inside a `cypher(graph, $$...$$, params)` table function. Where the Neo4j provider is "Cypher over Bolt", the AGE provider is "Cypher over Npgsql + agtype" — sharing no driver code with Neo4j and exercising the framework's seam against a fundamentally different wire format.
 
-### 10.1 Wiring: `UseInMemory(string databaseName)`
+### 10.1 Wiring: `UseAge`
+
+Two overloads, mirroring the Neo4j provider:
+
+- `UseAge(builder, string connectionString, string graphName)` — eager.
+- `UseAge(builder, Func<string> connectionStringFactory, string graphName)` — lazy. The factory is invoked once, on first data-source resolution. Used by Testcontainers fixtures whose connection string is only known after the container starts.
+
+Both forms construct the full set of provider services and supply them to the options builder:
+
+```csharp
+Lazy<NpgsqlDataSource> dataSource = new(() => AgeDataSourceCache.GetOrCreate(...));
+AgeCypherEmitter emitter = new(graphName);
+AgeResultMaterializer materializer = new();
+AgeGraphTransactionOpener opener = new(dataSource.Value, ...);
+AgeRawStatementExecutor executor = new(dataSource.Value, opener, ...);
+AgeTraversalTranslator translator = new(emitter, executor, materializer);
+```
+
+### 10.2 Data-source caching: `AgeDataSourceCache`
+
+A process-wide `ConcurrentDictionary<(connectionString, graphName), NpgsqlDataSource>`. Npgsql's `NpgsqlDataSource` owns the connection pool — caching it process-wide means every `AddGraphContext` against the same endpoint shares one pool.
+
+Each cached data source is built with two crucial pieces of configuration:
+
+- **`Options=-c search_path=ag_catalog,public`** baked into the connection string. AGE installs its `cypher()` function and `agtype` type under the `ag_catalog` schema, and PostgreSQL's default `search_path` doesn't include it. Setting `search_path` via the connection string's startup-`Options` parameter applies before any query runs and survives across logical opens; doing the same via a `SET` in a physical-connection initializer does *not* — the setting doesn't always persist back to the pool. The emitter additionally schema-qualifies `ag_catalog.cypher(...)` so the SQL form is robust even when callers run with a different search path.
+- **A physical-connection initializer** that runs `CREATE EXTENSION IF NOT EXISTS age` and `SELECT create_graph(graph_name)` if the graph doesn't already exist. AGE's `shared_preload_libraries = 'age'` in the upstream container image means `LOAD 'age'` is not needed per session.
+
+The cache has no eviction — same trade-off as the Neo4j driver cache; flagged in [§14](#14-known-constraints-and-non-goals).
+
+### 10.3 Cypher emission: `AgeCypherEmitter`
+
+The emitter follows the same shape as Neo4j's `CypherEmitter` — pure, stateless, one method per provider-contract operation — but produces **SQL-wrapped Cypher** rather than bare Cypher:
+
+```
+SELECT * FROM ag_catalog.cypher('graph_name', $$ <cypher body> $$, @p) AS (n agtype)
+```
+
+Where `<cypher body>` is the same Cypher a Neo4j emit would produce. Cross-cutting rules:
+
+- Cypher identifier escaping reuses the same `CypherIdentifier` (backticks, reserved-word table) — the openCypher dialect AGE accepts is the same as Neo4j's for the operations the framework emits.
+- Values are accumulated by a per-call `AgeParameterBinder` (identical contract to the Neo4j `ParameterBinder`) and serialized via `AgePropertySerializer` to JSON-friendly primitives (`Guid` → string, `DateTimeOffset`/`DateTime` → ISO-8601 round-trip, enum → its name).
+- The wrapped form takes parameters as a single `agtype` payload bound to SQL parameter `@p`. The executor JSON-serializes the binder's dictionary via `AgtypeWriter` and sends it as `NpgsqlDbType.Unknown`, which lets Postgres infer `agtype` (Npgsql doesn't ship an agtype writer) and satisfies AGE's strict "the third argument must be a bare parameter symbol" check.
+
+Two dialect deltas the emitter handles internally:
+
+- **`MERGE ... ON CREATE SET / ON MATCH SET` is not implemented in AGE 1.6.0.** Neo4j's emitter uses identical SET lists in both branches; the unconditional `MERGE ... SET ...` form has the same observable semantics and AGE accepts it.
+- **`count` is a SQL reserved word.** AGE rejects it as a column alias in the SQL `AS (...)` schema. The emitter renames the existence-count alias to `cnt` (matched by `AgeResultMaterializer.CountAlias`).
+
+### 10.4 Execution: `AgeRawStatementExecutor`
+
+The executor is the only place in the provider that talks to Postgres. Its job:
+
+1. Open a connection — the ambient `AgeGraphTransaction` if any, otherwise a fresh `NpgsqlConnection` borrowed from the cached data source.
+2. Bind parameters: if the dictionary is non-empty, JSON-encode it via `AgtypeWriter` and add as a single `@p` parameter with `NpgsqlDbType.Unknown`.
+3. **Set `command.AllResultTypesAreUnknown = true`** before executing. This is the single most important line in the provider: it tells Npgsql to return every column as a `string` at the protocol level rather than trying to map it to a CLR type. Without it, the `ag_catalog.agtype` columns AGE emits cannot be read at all — Npgsql doesn't ship an `agtype` reader, and `GetValue` / `GetFieldValue<string>` both throw.
+4. Drain the `NpgsqlDataReader` into a `List<IReadOnlyDictionary<string, object?>>` where every cell is a string (or null).
+
+Eager materialization on the async path and sync-over-async bridging both follow Neo4j's pattern and carry the same caveats.
+
+### 10.5 Transactions: `AgeGraphTransactionOpener`, `AgeGraphTransaction`
+
+`AgeGraphTransactionOpener` borrows an `NpgsqlConnection` from the cached data source on `Open()`, begins an `NpgsqlTransaction` on it, wraps both in an `AgeGraphTransaction`, and assigns it to the single ambient slot. The transaction wrapper drives `NpgsqlTransaction.CommitAsync` / `RollbackAsync` on the terminal call, then disposes the transaction and returns the connection to the pool. Same one-ambient-at-a-time invariant and same dispose-path logging as Neo4j.
+
+### 10.6 Materialization: `AgeResultMaterializer`, `AgtypeReader`, `AgtypeWriter`
+
+Rows reach the materializer as `IReadOnlyDictionary<string, string?>` (Npgsql in text mode). The materializer parses each agtype value via `AgtypeReader`:
+
+- **Vertex** and **edge** literals look like `{"id": 844424930131969, "label": "Author", "properties": {...}}::vertex` (edges include `start_id` / `end_id` and use `::edge`). The reader strips the suffix tag and parses the body as JSON via `JsonDocument`.
+- **Scalars** come back as JSON literals: strings quoted (`"Alice"`), numbers bare (`42`, `3.14`), booleans / nulls bare. `JsonDocument` distinguishes these via `JsonValueKind`. Integers are detected with `TryGetInt64` — note the load-bearing `(object)` cast in `ParseJsonScalar`, without which the conditional's common type widens `long` to `double` and every integer agtype scalar arrives as `System.Double`, breaking `ReadExists`'s `is long` pattern match.
+
+CLR conversion is the inverse of `AgePropertySerializer`: ISO-8601 string → `DateTimeOffset`/`DateTime`, hyphenated string → `Guid`, member-name string → enum, primitive coercion via `Convert.ChangeType` (under invariant culture to stay locale-safe).
+
+`AgtypeWriter` is the symmetric send-side: it takes the binder's parameter dictionary and produces an agtype JSON object suitable for the `@p` parameter. Values are expected to have already been flattened by `AgePropertySerializer` so the writer only sees JSON-friendly primitives.
+
+### 10.7 Traversal: `AgeTraversalTranslator`
+
+Identical shape to `Neo4jTraversalTranslator` — emit the wrapped SQL via `IStatementEmitter.EmitTraversal`, execute via `IRawStatementExecutor`, dispatch per-row materialization to `MaterializeNodeAt` or `MaterializeEdgeAt` based on the segment kind that the AST's return alias resolves to.
+
+### 10.8 What the conformance suite skips
+
+The four raw-statement conformance tests are skipped against AGE — they send bare openCypher into `RawStatement.Execute`, and AGE's raw surface is SQL-wrapped Cypher. Same shape as the in-memory provider's skips. Every other conformance test passes against `apache/age:release_PG16_1.6.0`.
+
+---
+
+## 11. In-memory provider
+
+A third concrete provider whose entire database is a process-resident `Dictionary` + `List` pair. Lives in `OnixLabs.ElementFramework.InMemory`. It serves two purposes: an integration-test double for downstream applications, and the in-process implementation that proves the seam works even when there is no query language to emit.
+
+### 11.1 Wiring: `UseInMemory(string databaseName)`
 
 ```csharp
 InMemoryStore store = InMemoryStoreRegistry.GetOrCreate(databaseName);
@@ -586,7 +682,7 @@ builder.UseStatementEmitter(emitter)
 
 Multiple contexts that bind the same `databaseName` share state — the store is fetched from a process-wide registry.
 
-### 10.2 Storage: `InMemoryStore`, `InMemoryStoreRegistry`, `InMemoryEdge`
+### 11.2 Storage: `InMemoryStore`, `InMemoryStoreRegistry`, `InMemoryEdge`
 
 `InMemoryStore` is a CLR-private graph:
 
@@ -603,7 +699,7 @@ The store exposes `UpsertNode`, `RemoveNode`, `FindNode`, `NodesOfType`, `AddEdg
 
 The store itself is **not thread-safe** — concurrent contexts pointing at the same name aren't protected. The provider is for tests and small demos, not production throughput.
 
-### 10.3 Op-coded statements: `InMemoryStatementEmitter`, `InMemoryRawStatementExecutor`
+### 11.3 Op-coded statements: `InMemoryStatementEmitter`, `InMemoryRawStatementExecutor`
 
 Rather than emit a query-language string, the emitter encodes the operation as an **op-code** in `DataStatement.Statement` and packs the resolved type, key, and instance references into `DataStatement.Parameters`:
 
@@ -624,11 +720,11 @@ EmitConnect → DataStatement(
 
 The raw-statement escape hatch isn't useful for the in-memory provider in the way it is for Neo4j (there's no Cypher to drop down to), so the conformance suite skips the four raw-Cypher tests when running against in-memory.
 
-### 10.4 Materialization: `InMemoryResultMaterializer`
+### 11.4 Materialization: `InMemoryResultMaterializer`
 
 Trivial. Rows already carry the live CLR instance under the alias, so materialization is a typed cast. The five interface methods all funnel through one `Cast<T>` helper; the alias-free typed-read methods use the provider's internal `NodeAlias` / `EdgeAlias` / `CountAlias` constants. Returning the same instance the consumer stored means **reference identity is preserved** across reads — handy for tests that assert on shared mutable state.
 
-### 10.5 Transactions: snapshot-based
+### 11.5 Transactions: snapshot-based
 
 `InMemoryGraphTransaction` holds a private `Clone()` of the canonical store. Every read and write inside the transaction targets the clone; on commit, the canonical store's contents are replaced (`ReplaceWith`) with the clone's. On rollback or dispose-without-commit, the clone is discarded.
 
@@ -641,7 +737,7 @@ private InMemoryStore Target =>
 
 Same one-ambient-at-a-time invariant as the Neo4j provider.
 
-### 10.6 Traversal: `InMemoryTraversalTranslator`
+### 11.6 Traversal: `InMemoryTraversalTranslator`
 
 The in-memory provider does **not** emit a query and execute it — there is no query language. Instead, the translator interprets the `TraversalAst` directly:
 
@@ -655,11 +751,11 @@ The translator deliberately doesn't go through `IStatementEmitter` — there'd b
 
 ---
 
-## 11. Testing architecture
+## 12. Testing architecture
 
-Three test projects mirror the three places functionality lives.
+The test projects mirror the places functionality lives — pure code lives in unit tests, behaviour every provider must satisfy lives in the conformance suite, and each provider has its own integration project that runs the suite end-to-end.
 
-### 11.1 Unit tests
+### 12.1 Unit tests
 
 Two unit-test projects cover the pure code.
 
@@ -685,7 +781,7 @@ The fixture file `TestFixtures.cs` ships a tiny `Author`/`Post`/`Comment` plus `
 
 Both projects run without any external dependency.
 
-### 11.2 Conformance suite: `OnixLabs.ElementFramework.Conformance`
+### 12.2 Conformance suite: `OnixLabs.ElementFramework.Conformance`
 
 A non-test library that ships:
 
@@ -693,27 +789,28 @@ A non-test library that ships:
 - `AbstractGraphContextIntegrationTests` — a provider-agnostic `[Fact]` suite covering every public consumer operation against the blog-application fixture (Author/Post/Comment plus Wrote/CommentOn/ReplyTo). Per-test reset routes through a `ResetGraphAsync` template method whose default implementation issues `MATCH (n) DETACH DELETE n` via the raw executor; non-Cypher providers override it.
 - `TestFixtures/BlogApplication/...` — the canonical model: three node types, three relationship types (including a marker edge `CommentOn` with no properties and a reflexive edge `ReplyTo` between two `Comment`s).
 
-Each concrete provider integration project (`InMemory.IntegrationTests`, `Neo4j.IntegrationTests`) subclasses `AbstractGraphContextIntegrationTests` once with a sealed class whose only responsibilities are `ConfigureServices` (DI registration with the provider's `Use*` extension) and overriding `ResetGraphAsync` if needed. Tests inherit; coverage is uniform; a new provider gets the full suite by adding ten lines.
+Each concrete provider integration project (`InMemory.IntegrationTests`, `Neo4j.IntegrationTests`, `AGE.IntegrationTests`) subclasses `AbstractGraphContextIntegrationTests` once with a sealed class whose only responsibilities are `ConfigureServices` (DI registration with the provider's `Use*` extension) and overriding `ResetGraphAsync` if needed. Tests inherit; coverage is uniform; a new provider gets the full suite by adding ten lines.
 
-The in-memory project additionally skips four conformance tests that assert on raw-Cypher semantics (the in-memory provider doesn't speak Cypher).
+The in-memory and AGE projects each skip four conformance tests that assert on raw-Cypher semantics — the in-memory provider doesn't speak Cypher at all, and AGE's raw surface is SQL-wrapped Cypher rather than bare Cypher.
 
-### 11.3 Provider integration tests
+### 12.3 Provider integration tests
 
 - `OnixLabs.ElementFramework.InMemory.IntegrationTests` — runs the conformance suite in-process against a fresh in-memory store registered per test.
 - `OnixLabs.ElementFramework.Neo4j.IntegrationTests` — runs the same conformance suite against a real Neo4j 5.x container managed by Testcontainers. Slow but real.
+- `OnixLabs.ElementFramework.AGE.IntegrationTests` — runs the same conformance suite against an Apache AGE container (`apache/age:release_PG16_1.6.0`) managed by Testcontainers. The same project also hosts the agtype reconnaissance probes (`AgeReconnaissanceTests`, `AgeReconnaissanceFixture`) that established how the agtype wire format behaves through Npgsql — these are retained as living documentation of the decisions encoded in the provider.
 
-### 11.4 CI
+### 12.4 CI
 
-`.github/workflows/ci.yml` runs four test steps in sequence: build → abstraction unit tests → Neo4j-provider unit tests → in-memory conformance → Neo4j conformance (the unit and in-memory passes fail fast on a regression before Docker is even started, shaving minutes off failed PRs). The publish step packs all four NuGet artefacts.
+`.github/workflows/ci.yml` runs five test steps in sequence: build → abstraction unit tests → Neo4j-provider unit tests → in-memory conformance → Neo4j conformance → AGE conformance (the unit and in-memory passes fail fast on a regression before Docker is even started, shaving minutes off failed PRs). The publish step packs all five NuGet artefacts.
 
 ---
 
-## 12. Adding a new provider
+## 13. Adding a new provider
 
 A new provider needs:
 
 1. **A project that depends on `OnixLabs.ElementFramework`.** The provider doesn't need to reference `OnixLabs.ElementFramework.Abstractions` directly — `OnixLabs.ElementFramework` transitively brings it.
-2. **Five implementations of the provider contract** (see [§6](#6-provider-contract)): `IStatementEmitter`, `IResultMaterializer`, `IRawStatementExecutor`, `IGraphTransactionOpener` (which mints `IGraphTransaction` instances), and `ITraversalTranslator`. The translator can either route back through the emitter+executor+materializer pipeline (Neo4j's model) or interpret the AST directly (in-memory's model).
+2. **Five implementations of the provider contract** (see [§6](#6-provider-contract)): `IStatementEmitter`, `IResultMaterializer`, `IRawStatementExecutor`, `IGraphTransactionOpener` (which mints `IGraphTransaction` instances), and `ITraversalTranslator`. The translator can either route back through the emitter+executor+materializer pipeline (Neo4j and AGE follow this model) or interpret the AST directly (in-memory's model).
 3. **A `Use<YourProvider>(GraphContextOptionsBuilder, ...)` extension** that constructs the five services and supplies them via `UseStatementEmitter`, `UseResultMaterializer`, `UseRawStatementExecutor`, `UseGraphTransactionOpener`, `UseTraversalTranslator`. The extension is the only consumer-visible API of the provider.
 4. **A `<YourProvider>.IntegrationTests` project** that subclasses `AbstractGraphContextIntegrationTests` from the conformance suite. Two methods (`ConfigureServices` + `ResetGraphAsync`) is the typical footprint.
 
@@ -725,31 +822,31 @@ Conventions to honour:
 - **Transactional routing:** the executor must consult `opener.Active` to decide whether to run inside the ambient transaction or open a fresh auto-commit scope. The framework will not pass the transaction handle through.
 - **One ambient at a time:** the opener must throw `GraphTransactionAlreadyActiveException` when `Open()` is called and `Active` is non-null.
 
-The architecture is well-shaped for Cypher-family stores. For non-Cypher backends (Gremlin, SPARQL), the predicate tree and traversal AST work, but two seams are awkward: result rows are implicitly Bolt-shaped (`row[alias]` returns the rich entity), and the linear segment list assumes a Cypher-style path. See [§13](#13-known-constraints-and-non-goals).
+The architecture is well-shaped for Cypher-family stores — Neo4j (Bolt) and Apache AGE (Postgres + agtype) are both built against this seam. For non-Cypher backends (Gremlin, SPARQL), the predicate tree and traversal AST work, but the linear segment list assumes a Cypher-style path. See [§14](#14-known-constraints-and-non-goals).
 
 ---
 
-## 13. Known constraints and non-goals
+## 14. Known constraints and non-goals
 
 This is the architectural counterpart to [`docs/production-readiness.md`](production-readiness.md), which is the operational view. Read both together.
 
 **Cypher-family by design.**
-The traversal AST is a linear segment list; predicates are a tree that translates cleanly to Cypher's `WHERE`; result rows assume `row[alias]` returns an entity-shaped value. Gremlin (step-based) and SPARQL (triple-based) would require generalising the AST shape and the materializer signature. v1 scope is "Neo4j and MemGraph today, Cypher-speaking stores later."
+The traversal AST is a linear segment list; predicates are a tree that translates cleanly to Cypher's `WHERE`; the materializer reads the row shape its emitter agreed to. The AGE provider has demonstrated this works across wire formats as different as Bolt and Postgres-over-Npgsql. Gremlin (step-based) and SPARQL (triple-based) would still require generalising the AST shape. v1 scope is "Cypher-speaking stores."
 
 **One ambient transaction at a time.**
 Nested transactions are not supported. Concurrent transactions on a single context are not supported. A consumer that wants parallelism instantiates multiple contexts.
 
 **No connection pooling abstraction.**
-Each provider owns its own connection-management strategy (Neo4j caches drivers process-wide; in-memory has nothing to pool). The framework does not standardize lifetime, eviction, or health.
+Each provider owns its own connection-management strategy (Neo4j caches drivers process-wide; AGE caches Npgsql data sources process-wide; in-memory has nothing to pool). The framework does not standardize lifetime, eviction, or health.
 
 **Logging only; no metrics or distributed-tracing yet.**
 The framework consumes `ILoggerFactory` (set via `GraphContextOptionsBuilder.UseLoggerFactory` or injected through the SP-aware `AddGraphContext` overload) and writes diagnostic events: every Cypher statement at `Debug` (with parameter count, not values), every transaction open / commit / rollback / best-effort-rollback-on-dispose at `Information`, every previously-swallowed dispose-path exception at `Warning`, every `ChangeTracker.Flush` start/end at `Debug` (rollback events at `Warning`). There are no metrics counters, no `System.Diagnostics.Activity` spans, and no health probes yet.
 
-**Sync-over-async surface (Neo4j).**
-The Neo4j driver is async-only; the provider's sync surface bridges via `GetAwaiter().GetResult()`. This deadlocks under hosts that capture a synchronization context (ASP.NET Classic, WinForms, WPF). Use the async surface in those hosts. ASP.NET Core, console, and modern hosted-service consumers are unaffected.
+**Sync-over-async surface (Neo4j and AGE).**
+Both the Neo4j driver and Npgsql are async-first; the providers' sync surfaces bridge via `GetAwaiter().GetResult()`. This deadlocks under hosts that capture a synchronization context (ASP.NET Classic, WinForms, WPF). Use the async surface in those hosts. ASP.NET Core, console, and modern hosted-service consumers are unaffected.
 
-**Eager row materialization (Neo4j).**
-`IAsyncEnumerable` is currently a façade — the executor drains the cursor before returning. Queries returning very large result sets will OOM. The design is intentional (faults surface at execute time, not enumeration time) but the trade-off is honest.
+**Eager row materialization (Neo4j and AGE).**
+`IAsyncEnumerable` is currently a façade — both providers drain their cursor / reader before returning. Queries returning very large result sets will OOM. The design is intentional (faults surface at execute time, not enumeration time) but the trade-off is honest.
 
 **In-memory provider is not for production.**
 No thread-safety on the store, no eviction in the registry, no persistence, no query optimization. It exists for unit-test scenarios in consumer code and for keeping the abstraction honest about non-Cypher providers.

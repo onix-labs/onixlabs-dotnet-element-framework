@@ -70,6 +70,13 @@ jobs:
           --no-build
           --verbosity normal
 
+      - name: Run Apache AGE integration tests
+        run: >
+          dotnet test OnixLabs.ElementFramework.AGE.IntegrationTests/OnixLabs.ElementFramework.AGE.IntegrationTests.csproj
+          --configuration Release
+          --no-build
+          --verbosity normal
+
   publish:
     name: Publish
     needs: build-and-test
@@ -128,7 +135,7 @@ jobs:
           VERSION: ${{ steps.version.outputs.VERSION }}
         run: |
           set -e
-          for pkg in onixlabs.elementframework onixlabs.elementframework.abstractions onixlabs.elementframework.neo4j onixlabs.elementframework.inmemory; do
+          for pkg in onixlabs.elementframework onixlabs.elementframework.abstractions onixlabs.elementframework.neo4j onixlabs.elementframework.inmemory onixlabs.elementframework.age; do
             url="https://api.nuget.org/v3-flatcontainer/${pkg}/${VERSION}/${pkg}.nuspec"
             status=$(curl -s -o /dev/null -w '%{http_code}' "${url}")
             if [[ "${status}" == "200" ]]; then
@@ -141,7 +148,7 @@ jobs:
         env:
           VERSION: ${{ steps.version.outputs.VERSION }}
         run: |
-          for proj in OnixLabs.ElementFramework.Abstractions OnixLabs.ElementFramework OnixLabs.ElementFramework.Neo4j OnixLabs.ElementFramework.InMemory; do
+          for proj in OnixLabs.ElementFramework.Abstractions OnixLabs.ElementFramework OnixLabs.ElementFramework.Neo4j OnixLabs.ElementFramework.InMemory OnixLabs.ElementFramework.AGE; do
             dotnet pack "${proj}/${proj}.csproj" \
               --configuration Release \
               --output ./artifacts \

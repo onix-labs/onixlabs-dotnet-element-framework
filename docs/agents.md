@@ -17,9 +17,9 @@ The starting point for AI agents working in this repository. Read this first, th
 
 **What this is.** An Object-Graph Mapper (OGM) for .NET. Consumer code declares CLR types as nodes/edges, the framework owns an identity map and a queue of pending changes, and `SaveChanges` translates them into provider-native statements wrapped in a transaction. See [architecture.md §1–3](architecture.md#1-10000-foot-view) for the mental model.
 
-**Four production projects.** `Abstractions` (contracts only), `OnixLabs.ElementFramework` (default impl: change tracker, model, sets, traversal, DI), `OnixLabs.ElementFramework.Neo4j` (Cypher provider), `OnixLabs.ElementFramework.InMemory` (in-process provider for tests/demos).
+**Five production projects.** `Abstractions` (contracts only), `OnixLabs.ElementFramework` (default impl: change tracker, model, sets, traversal, DI), `OnixLabs.ElementFramework.Neo4j` (Cypher-over-Bolt provider), `OnixLabs.ElementFramework.AGE` (Cypher-over-Npgsql provider for Apache AGE on Postgres), `OnixLabs.ElementFramework.InMemory` (in-process provider for tests/demos).
 
-**Three test projects.** `UnitTests` (against the default impl), `Conformance` (a library of provider-agnostic integration tests, subclassed per provider), and `<Provider>.IntegrationTests` (one per provider, runs the conformance suite end-to-end).
+**Five test projects.** `UnitTests` (against the default impl), `Neo4j.UnitTests` (provider-pure functions), `Conformance` (a library of provider-agnostic integration tests, subclassed per provider), and `<Provider>.IntegrationTests` (one per provider, runs the conformance suite end-to-end).
 
 **Dependency direction is strictly inward.** Providers reference `OnixLabs.ElementFramework` (which transitively pulls `Abstractions`). Provider-to-provider references do not exist. Don't introduce them.
 
@@ -34,15 +34,19 @@ dotnet build onixlabs-dotnet-element-framework.slnx
 
 # Unit tests (fast, no external deps)
 dotnet test OnixLabs.ElementFramework.UnitTests/OnixLabs.ElementFramework.UnitTests.csproj --no-build
+dotnet test OnixLabs.ElementFramework.Neo4j.UnitTests/OnixLabs.ElementFramework.Neo4j.UnitTests.csproj --no-build
 
 # In-memory conformance (fast, no external deps)
 dotnet test OnixLabs.ElementFramework.InMemory.IntegrationTests/OnixLabs.ElementFramework.InMemory.IntegrationTests.csproj --no-build
 
 # Neo4j integration (needs Docker daemon for Testcontainers; slow)
 dotnet test OnixLabs.ElementFramework.Neo4j.IntegrationTests/OnixLabs.ElementFramework.Neo4j.IntegrationTests.csproj --no-build
+
+# Apache AGE integration (needs Docker daemon for Testcontainers; slow)
+dotnet test OnixLabs.ElementFramework.AGE.IntegrationTests/OnixLabs.ElementFramework.AGE.IntegrationTests.csproj --no-build
 ```
 
-Run the in-memory conformance suite before the Neo4j one — it catches abstraction-layer regressions without spinning up a container. The CI workflow does this automatically.
+Run the in-memory conformance suite before the Dockerised ones — it catches abstraction-layer regressions without spinning up a container. The CI workflow does this automatically.
 
 ### Targets
 
@@ -53,7 +57,7 @@ Multi-targets **net8.0**, **net9.0**, **net10.0**. The build runs every target; 
 Outside `Abstractions`, only these are public:
 
 - `GraphContext` (abstract base for consumer contexts)
-- `GraphContextOptionsBuilder` and its `Use*` extension methods (`UseNeo4j`, `UseInMemory`, …)
+- `GraphContextOptionsBuilder` and its `Use*` extension methods (`UseNeo4j`, `UseAge`, `UseInMemory`, …)
 - `ServiceCollectionExtensions.AddGraphContext<T>`
 - `InMemoryStoreRegistry` (process-wide store registry — public for test reset hooks)
 - The full exception hierarchy
@@ -285,7 +289,7 @@ public override string ToString() => name;
 
 ## 5. Common gotchas
 
-The architectural sharp edges that trip up first-time contributors. Most are explained in more depth in [architecture.md §13](architecture.md#13-known-constraints-and-non-goals) and [production-readiness.md](production-readiness.md).
+The architectural sharp edges that trip up first-time contributors. Most are explained in more depth in [architecture.md §14](architecture.md#14-known-constraints-and-non-goals) and [production-readiness.md](production-readiness.md).
 
 - **`ModelSource` caches by CLR type for the lifetime of the process.** `OnModelCreating` is invoked exactly once per `GraphContext` subclass. Don't put non-pure logic in it. Tests that hot-reload context types will surprise themselves.
 - **`ChangeTracker.TrackRemove` updates the identity map at track time, not flush time.** If a flush fails and rolls back, the identity map will report the node as gone while the database still has it. The pending queue is preserved on failure for retry; the identity map is not.
@@ -297,7 +301,8 @@ The architectural sharp edges that trip up first-time contributors. Most are exp
 - **`InMemoryStore` is not thread-safe.** Concurrent contexts pointing at the same database name will race. The in-memory provider is for tests and small demos.
 - **One ambient transaction at a time.** Calling `BeginTransaction` while another is active throws `GraphTransactionAlreadyActiveException`. Nested transactions are not supported.
 - **`GraphContextOptions` is public but `[EditorBrowsable(Never)]`.** It exists only because the consumer subclass constructor must accept it. Don't hand-instantiate it — go through `AddGraphContext` and the options builder.
-- **Logging is wired; respect the level conventions when adding more.** `ILoggerFactory` is consumed by `ChangeTracker`, `Neo4jCypherExecutor`, `Neo4jGraphTransactionOpener`, `Neo4jGraphTransaction`, and `Neo4jDriverCache`. Convention: emitted statements log at `Debug` (with statement text and parameter count, never values), transaction open/commit/rollback and best-effort-rollback-on-dispose log at `Information`, failures and previously-swallowed dispose-path exceptions log at `Warning`. To inject a `LoggerFactory` from a host, use the SP-aware `AddGraphContext` overload and call `UseLoggerFactory` **before** the provider's `Use*` extension — providers read the factory at composition time.
+- **Logging is wired; respect the level conventions when adding more.** `ILoggerFactory` is consumed by `ChangeTracker` and every provider's executor / transaction-opener / transaction / connection cache. Convention: emitted statements log at `Debug` (with statement text and parameter count, never values), transaction open/commit/rollback and best-effort-rollback-on-dispose log at `Information`, failures and previously-swallowed dispose-path exceptions log at `Warning`. To inject a `LoggerFactory` from a host, use the SP-aware `AddGraphContext` overload and call `UseLoggerFactory` **before** the provider's `Use*` extension — providers read the factory at composition time.
+- **AGE has provider-specific quirks the emitter handles internally.** `cypher()` and the `agtype` type are schema-qualified to `ag_catalog.*` because `search_path` is set via the connection string's `Options=-c search_path=ag_catalog,public` and qualifying isn't expensive. `count` is renamed to `cnt` everywhere — it's a SQL reserved word and AGE rejects it as a column alias in `AS (...)`. `MERGE ... ON CREATE SET / ON MATCH SET` is rewritten to plain `MERGE ... SET` because AGE 1.6.0 doesn't implement the conditional forms (semantics are equivalent when both branches' SET lists are identical, which is what Neo4j emits). Read rows arrive as `string` because `command.AllResultTypesAreUnknown = true` is the only reliable way to pull `agtype` through Npgsql; the materializer parses the JSON-ish body. Parameters flow as a single `@p` with `NpgsqlDbType.Unknown` so AGE's strict third-arg check passes.
 - **`PredicateTranslator` supports a fixed grammar.** Comparison, boolean composition, null checks, string `Contains`/`StartsWith`/`EndsWith` only. Anything else throws `NotSupportedException` and consumers should use `RawStatement.Execute(...)`. See [architecture.md §7.3–7.4](architecture.md#73-the-predicate-tree).
 
 ---
@@ -319,12 +324,16 @@ Quick reference for "I need to change X — what file?"
 | Cypher emission | `CypherEmitter.cs`, `CypherIdentifier.cs`, `ParameterBinder.cs`, `PropertySerializer.cs` | [arch §9.3](architecture.md#93-cypher-emission-cypheremitter-cypheridentifier-parameterbinder-propertyserializer) |
 | Neo4j transactions / driver caching | `Neo4jGraphTransactionOpener.cs`, `Neo4jGraphTransaction.cs`, `Neo4jDriverCache.cs` | [arch §9.2 and §9.5](architecture.md#92-driver-caching-neo4jdrivercache) |
 | Neo4j result materialization | `Neo4jResultMaterializer.cs` | [arch §9.6](architecture.md#96-materialization-neo4jresultmaterializer) |
-| In-memory store / snapshot transactions | `InMemoryStore.cs`, `InMemoryStoreRegistry.cs`, `InMemoryGraphTransaction.cs`, `InMemoryGraphTransactionOpener.cs` | [arch §10.2 and §10.5](architecture.md#102-storage-inmemorystore-inmemorystoreregistry-inmemoryedge) |
-| In-memory op-coded statements | `InMemoryStatementEmitter.cs`, `InMemoryRawStatementExecutor.cs` | [arch §10.3](architecture.md#103-op-coded-statements-inmemorystatementemitter-inmemoryrawstatementexecutor) |
-| In-memory pattern walk / predicate evaluator | `InMemoryTraversalTranslator.cs` | [arch §10.6](architecture.md#106-traversal-inmemorytraversaltranslator) |
-| Test fixtures (blog application) | `OnixLabs.ElementFramework.Conformance/TestFixtures/BlogApplication/` | [arch §11.2](architecture.md#112-conformance-suite-onixlabselementframeworkconformance) |
-| Conformance suite (provider-agnostic tests) | `OnixLabs.ElementFramework.Conformance/AbstractGraphContextIntegrationTests.cs` | [arch §11.2](architecture.md#112-conformance-suite-onixlabselementframeworkconformance) |
-| Unit-test fakes | `OnixLabs.ElementFramework.UnitTests/TestFixtures.cs` | [arch §11.1](architecture.md#111-unit-tests-onixlabselementframeworkunittests) |
-| CI pipeline | `.github/workflows/ci.yml` | [arch §11.4](architecture.md#114-ci) |
+| AGE Cypher emission (cypher() wrapping) | `AgeCypherEmitter.cs`, `CypherIdentifier.cs`, `AgeParameterBinder.cs`, `AgePropertySerializer.cs` | [arch §10.3](architecture.md#103-cypher-emission-agecypheremitter) |
+| AGE Npgsql executor / data-source cache | `AgeRawStatementExecutor.cs`, `AgeDataSourceCache.cs` | [arch §10.4 and §10.2](architecture.md#102-data-source-caching-agedatasourcecache) |
+| AGE transactions | `AgeGraphTransactionOpener.cs`, `AgeGraphTransaction.cs` | [arch §10.5](architecture.md#105-transactions-agegraphtransactionopener-agegraphtransaction) |
+| AGE result materialization / agtype parser | `AgeResultMaterializer.cs`, `AgtypeReader.cs`, `AgtypeWriter.cs` | [arch §10.6](architecture.md#106-materialization-ageresultmaterializer-agtypereader-agtypewriter) |
+| In-memory store / snapshot transactions | `InMemoryStore.cs`, `InMemoryStoreRegistry.cs`, `InMemoryGraphTransaction.cs`, `InMemoryGraphTransactionOpener.cs` | [arch §11.2 and §11.5](architecture.md#112-storage-inmemorystore-inmemorystoreregistry-inmemoryedge) |
+| In-memory op-coded statements | `InMemoryStatementEmitter.cs`, `InMemoryRawStatementExecutor.cs` | [arch §11.3](architecture.md#113-op-coded-statements-inmemorystatementemitter-inmemoryrawstatementexecutor) |
+| In-memory pattern walk / predicate evaluator | `InMemoryTraversalTranslator.cs` | [arch §11.6](architecture.md#116-traversal-inmemorytraversaltranslator) |
+| Test fixtures (blog application) | `OnixLabs.ElementFramework.Conformance/TestFixtures/BlogApplication/` | [arch §12.2](architecture.md#122-conformance-suite-onixlabselementframeworkconformance) |
+| Conformance suite (provider-agnostic tests) | `OnixLabs.ElementFramework.Conformance/AbstractGraphContextIntegrationTests.cs` | [arch §12.2](architecture.md#122-conformance-suite-onixlabselementframeworkconformance) |
+| Unit-test fakes | `OnixLabs.ElementFramework.UnitTests/TestFixtures.cs` | [arch §12.1](architecture.md#121-unit-tests) |
+| CI pipeline | `.github/workflows/ci.yml` | [arch §12.4](architecture.md#124-ci) |
 
-When adding a new provider, the checklist is in [architecture.md §12](architecture.md#12-adding-a-new-provider).
+When adding a new provider, the checklist is in [architecture.md §13](architecture.md#13-adding-a-new-provider).
