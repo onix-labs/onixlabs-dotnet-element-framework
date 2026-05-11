@@ -46,6 +46,8 @@ public sealed class AgeGraphContextIntegrationTests(ITestOutputHelper output, Ag
 
     private BlogGraphContext Context => Scope.GetRequiredService<BlogGraphContext>();
 
+    protected override string? ProviderSourceName => AgeDiagnostics.SourceName;
+
     // The four raw-statement conformance tests in the base class send openCypher directly into
     // RawStatement.Execute. AGE's raw surface is SQL — Cypher must be wrapped in cypher() — so the
     // Neo4j-flavored Cypher snippets the base tests use don't compose. We skip them here in the

@@ -33,4 +33,6 @@ public sealed class Neo4jGraphContextIntegrationTests(ITestOutputHelper output, 
     protected override void ConfigureServices(IServiceCollection services) =>
         services.AddGraphContext<BlogGraphContext>(builder =>
             builder.UseNeo4j(() => fixture.ConnectionString, fixture.AuthToken));
+
+    protected override string? ProviderSourceName => Neo4jDiagnostics.SourceName;
 }

@@ -24,6 +24,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 
 namespace OnixLabs.ElementFramework.UnitTests;
 
+[Collection("Diagnostics-sensitive")]
 public class ChangeTrackerTests
 {
     private readonly GraphModel model = TestModel.Build();

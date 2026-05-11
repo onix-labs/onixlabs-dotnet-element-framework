@@ -20,6 +20,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
+using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using Microsoft.Extensions.Logging;
 using Neo4j.Driver;
@@ -117,16 +118,21 @@ internal sealed class Neo4jCypherExecutor : IRawStatementExecutor
         if (transactionOpener.Active is Neo4jGraphTransaction ambient)
         {
             IResultCursor cursor;
-            try
+            using (Activity? activity = StartExecuteActivity("ambient", parameters.Count))
             {
-                logger.LogDebug("Executing Cypher within ambient transaction ({ParameterCount} parameters): {Statement}", parameters.Count, cypher);
-                cursor = await ambient.Transaction.RunAsync(cypher, driverParameters).ConfigureAwait(false);
-            }
-            catch (Exception exception)
-            {
-                logger.LogWarning(exception, "Failed to execute Cypher statement: {Statement}", cypher);
-                throw new RawStatementException(
-                    "Failed to execute the supplied Cypher statement against the Neo4j endpoint.", exception);
+                try
+                {
+                    logger.LogDebug("Executing Cypher within ambient transaction ({ParameterCount} parameters): {Statement}", parameters.Count, cypher);
+                    cursor = await ambient.Transaction.RunAsync(cypher, driverParameters).ConfigureAwait(false);
+                    RecordExecuteSuccess(activity, "ambient");
+                }
+                catch (Exception exception)
+                {
+                    RecordExecuteFailure(activity, "ambient", exception);
+                    logger.LogWarning(exception, "Failed to execute Cypher statement: {Statement}", cypher);
+                    throw new RawStatementException(
+                        "Failed to execute the supplied Cypher statement against the Neo4j endpoint.", exception);
+                }
             }
 
             await foreach (IRecord record in cursor.WithCancellation(token).ConfigureAwait(false))
@@ -139,20 +145,60 @@ internal sealed class Neo4jCypherExecutor : IRawStatementExecutor
         // out of scope (consumer-side enumerator dispose or normal completion).
         await using IAsyncSession session = driver.Value.AsyncSession();
         IResultCursor autoCursor;
-        try
+        using (Activity? activity = StartExecuteActivity("auto", parameters.Count))
         {
-            logger.LogDebug("Executing Cypher in auto-commit session ({ParameterCount} parameters): {Statement}", parameters.Count, cypher);
-            autoCursor = await session.RunAsync(cypher, driverParameters).ConfigureAwait(false);
-        }
-        catch (Exception exception)
-        {
-            logger.LogWarning(exception, "Failed to execute Cypher statement: {Statement}", cypher);
-            throw new RawStatementException(
-                "Failed to execute the supplied Cypher statement against the Neo4j endpoint.", exception);
+            try
+            {
+                logger.LogDebug("Executing Cypher in auto-commit session ({ParameterCount} parameters): {Statement}", parameters.Count, cypher);
+                autoCursor = await session.RunAsync(cypher, driverParameters).ConfigureAwait(false);
+                RecordExecuteSuccess(activity, "auto");
+            }
+            catch (Exception exception)
+            {
+                RecordExecuteFailure(activity, "auto", exception);
+                logger.LogWarning(exception, "Failed to execute Cypher statement: {Statement}", cypher);
+                throw new RawStatementException(
+                    "Failed to execute the supplied Cypher statement against the Neo4j endpoint.", exception);
+            }
         }
 
         await foreach (IRecord record in autoCursor.WithCancellation(token).ConfigureAwait(false))
             yield return ToRow(record);
+    }
+
+    /// <summary>
+    /// Starts a <c>Neo4j.ExecuteStatement</c> span tagged with the parameter count and routing mode. The span covers only the open-cursor phase — once the driver returns the cursor, the span ends and streaming proceeds without an open activity (the Neo4j driver's own <see cref="ActivitySource"/> covers the wire-layer fetches).
+    /// </summary>
+    private static Activity? StartExecuteActivity(string mode, int parameterCount)
+    {
+        Activity? activity = Neo4jDiagnostics.Source.StartActivity("Neo4j.ExecuteStatement", ActivityKind.Client);
+        activity?.SetTag("elementframework.parameter.count", parameterCount);
+        activity?.SetTag("elementframework.transaction.mode", mode);
+        activity?.SetTag("db.system", "neo4j");
+        return activity;
+    }
+
+    /// <summary>
+    /// Marks the supplied <paramref name="activity"/> as successful and ticks the statements counter with the success outcome.
+    /// </summary>
+    private static void RecordExecuteSuccess(Activity? activity, string mode)
+    {
+        activity?.SetStatus(ActivityStatusCode.Ok);
+        Neo4jDiagnostics.StatementsCounter.Add(1,
+            new KeyValuePair<string, object?>("elementframework.transaction.mode", mode),
+            new KeyValuePair<string, object?>("outcome", "success"));
+    }
+
+    /// <summary>
+    /// Marks the supplied <paramref name="activity"/> as failed (status + exception.type tag) and ticks the statements counter with the failure outcome.
+    /// </summary>
+    private static void RecordExecuteFailure(Activity? activity, string mode, Exception exception)
+    {
+        activity?.SetStatus(ActivityStatusCode.Error, exception.Message);
+        activity?.SetTag("exception.type", exception.GetType().FullName);
+        Neo4jDiagnostics.StatementsCounter.Add(1,
+            new KeyValuePair<string, object?>("elementframework.transaction.mode", mode),
+            new KeyValuePair<string, object?>("outcome", "failure"));
     }
 
     /// <summary>

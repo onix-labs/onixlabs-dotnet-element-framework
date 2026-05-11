@@ -15,9 +15,10 @@ A comprehensive tour of the Element Framework, starting from the highest-level v
 9. [Neo4j provider](#9-neo4j-provider)
 10. [Apache AGE provider](#10-apache-age-provider)
 11. [In-memory provider](#11-in-memory-provider)
-12. [Testing architecture](#12-testing-architecture)
-13. [Adding a new provider](#13-adding-a-new-provider)
-14. [Known constraints and non-goals](#14-known-constraints-and-non-goals)
+12. [Diagnostics surface](#12-diagnostics-surface)
+13. [Testing architecture](#13-testing-architecture)
+14. [Adding a new provider](#14-adding-a-new-provider)
+15. [Known constraints and non-goals](#15-known-constraints-and-non-goals)
 
 ---
 
@@ -341,7 +342,7 @@ public sealed record TraversalAst(
 
 The segments list alternates `NodePatternSegment` and `RelationshipPatternSegment` and always begins with a node. A `RelationshipPatternSegment` carries an alias, the edge CLR type, and a `RelationshipDirection` (`Outgoing | Incoming | Either`).
 
-The AST is intentionally **linear, not tree-shaped**, because Cypher patterns are linear. This is one of the architectural choices that scopes the framework to Cypher-family stores by design — see [§14](#14-known-constraints-and-non-goals).
+The AST is intentionally **linear, not tree-shaped**, because Cypher patterns are linear. This is one of the architectural choices that scopes the framework to Cypher-family stores by design — see [§15](#15-known-constraints-and-non-goals).
 
 ### 7.3 The predicate tree
 
@@ -505,7 +506,7 @@ A process-wide `ConcurrentDictionary<DriverKey, IDriver>` keyed by `(connectionS
 
 Auth-token equality is reference-based because `IAuthToken` doesn't override equality; two callers building separate `AuthTokens.Basic(...)` objects against the same credentials will create two drivers. In production this is fine (the connection string and auth are constructed once); in tests it's a non-issue because each Testcontainer has a unique connection string.
 
-The cache has no eviction — see [§14](#14-known-constraints-and-non-goals).
+The cache has no eviction — see [§15](#15-known-constraints-and-non-goals).
 
 ### 9.3 Cypher emission: `CypherEmitter`, `CypherIdentifier`, `ParameterBinder`, `PropertySerializer`
 
@@ -606,7 +607,7 @@ Each cached data source is built with two crucial pieces of configuration:
 - **`Options=-c search_path=ag_catalog,public`** baked into the connection string. AGE installs its `cypher()` function and `agtype` type under the `ag_catalog` schema, and PostgreSQL's default `search_path` doesn't include it. Setting `search_path` via the connection string's startup-`Options` parameter applies before any query runs and survives across logical opens; doing the same via a `SET` in a physical-connection initializer does *not* — the setting doesn't always persist back to the pool. The emitter additionally schema-qualifies `ag_catalog.cypher(...)` so the SQL form is robust even when callers run with a different search path.
 - **A physical-connection initializer** that runs `CREATE EXTENSION IF NOT EXISTS age` and `SELECT create_graph(graph_name)` if the graph doesn't already exist. AGE's `shared_preload_libraries = 'age'` in the upstream container image means `LOAD 'age'` is not needed per session.
 
-The cache has no eviction — same trade-off as the Neo4j driver cache; flagged in [§14](#14-known-constraints-and-non-goals).
+The cache has no eviction — same trade-off as the Neo4j driver cache; flagged in [§15](#15-known-constraints-and-non-goals).
 
 ### 10.3 Cypher emission: `AgeCypherEmitter`
 
@@ -755,11 +756,83 @@ The translator deliberately doesn't go through `IStatementEmitter` — there'd b
 
 ---
 
-## 12. Testing architecture
+## 12. Diagnostics surface
+
+The framework emits OpenTelemetry-compatible tracing and metrics via the .NET BCL's `System.Diagnostics.ActivitySource` and `System.Diagnostics.Metrics.Meter` APIs. There is no dependency on the OpenTelemetry SDK — consumers add `OpenTelemetry` packages on their side and subscribe to the framework's source and meter names. Three layers compose:
+
+- **Framework spans** (`OnixLabs.ElementFramework`): SaveChanges, BeginTransaction, Commit, Rollback.
+- **Provider spans** (`OnixLabs.ElementFramework.Neo4j`, `OnixLabs.ElementFramework.AGE`): ExecuteStatement, TranslateTraversal.
+- **Driver spans** (Neo4j.Driver, Npgsql): wire-layer round-trips. Emitted by the underlying drivers, not by us.
+
+The in-memory provider does not instrument — there is no IO to measure.
+
+### 12.1 Source names and conventions
+
+Every project that emits spans exposes a `*Diagnostics` static class. Its public `SourceName`, `MeterName`, and `Version` constants give consumers the strings to register:
+
+```csharp
+tracerProviderBuilder
+    .AddSource(ElementFrameworkDiagnostics.SourceName)
+    .AddSource(Neo4jDiagnostics.SourceName)
+    .AddSource(AgeDiagnostics.SourceName);
+
+meterProviderBuilder
+    .AddMeter(ElementFrameworkDiagnostics.MeterName)
+    .AddMeter(Neo4jDiagnostics.MeterName)
+    .AddMeter(AgeDiagnostics.MeterName);
+```
+
+The `ActivitySource` and `Meter` instances themselves are `internal` — consumers don't construct them, just subscribe by name.
+
+### 12.2 Framework spans
+
+| Operation name | Kind | Tags |
+| --- | --- | --- |
+| `ElementFramework.SaveChanges` | Internal | `elementframework.operation.count`, `elementframework.transaction.mode` (`ambient` \| `auto`), `exception.type` (on error) |
+| `ElementFramework.BeginTransaction` | Internal | `exception.type` (on error) |
+| `ElementFramework.Transaction.Commit` | Internal | `exception.type` (on error) |
+| `ElementFramework.Transaction.Rollback` | Internal | `exception.type` (on error) |
+
+The auto-open transaction inside `ChangeTracker.Flush` is deliberately invisible to the BeginTransaction/Commit spans — it bypasses `GraphTransactionFactory` so the change tracker can preserve pending operations across an auto-flush rollback (see [§5.4](#54-change-tracking-changetracker)). Only consumer-initiated transactions show the explicit BeginTransaction → Commit/Rollback hierarchy.
+
+### 12.3 Provider spans
+
+| Provider | Operation name | Kind | Tags |
+| --- | --- | --- | --- |
+| Neo4j | `Neo4j.ExecuteStatement` | Client | `db.system=neo4j`, `elementframework.parameter.count`, `elementframework.transaction.mode`, `exception.type` (on error) |
+| Neo4j | `Neo4j.TranslateTraversal` | Internal | `db.system=neo4j`, `elementframework.traversal.kind`, `elementframework.traversal.segment_count`, `elementframework.traversal.predicate_count`, `elementframework.traversal.return_alias` |
+| AGE | `AGE.ExecuteStatement` | Client | `db.system=postgresql`, `elementframework.parameter.count`, `elementframework.transaction.mode`, `exception.type` (on error) |
+| AGE | `AGE.TranslateTraversal` | Internal | `db.system=postgresql`, `elementframework.traversal.kind`, `elementframework.traversal.segment_count`, `elementframework.traversal.predicate_count`, `elementframework.traversal.return_alias` |
+
+`ExecuteStatement` covers only the open-cursor / open-reader phase. Streaming continuation is intentionally outside the span — the driver's own `ActivitySource` emits the wire-layer fetches, and keeping our span tight to the actual round-trip avoids spans that hang for the duration of a long enumeration.
+
+### 12.4 Counters
+
+| Meter | Counter name | Tags |
+| --- | --- | --- |
+| Framework | `elementframework.savechanges.flushes` | `outcome` (`success` \| `failure` \| `noop`), `elementframework.transaction.mode` |
+| Framework | `elementframework.savechanges.operations` | `elementframework.transaction.mode` |
+| Framework | `elementframework.transactions.terminals` | `outcome` (`committed` \| `rolledback` \| `commit_failed` \| `rollback_failed` \| `disposed_without_terminal`) |
+| Neo4j | `elementframework.neo4j.statements` | `elementframework.transaction.mode`, `outcome` |
+| AGE | `elementframework.age.statements` | `elementframework.transaction.mode`, `outcome` |
+
+### 12.5 PII discipline
+
+Spans and counters attach only **structural metadata** — counts, kinds, modes, alias names, outcome tags. Never:
+
+- Parameter values (they go through `IRawStatementExecutor.Execute` typed as `object?` and may contain PII).
+- Full statement bodies (the framework's emitted Cypher and SQL is template-stable, but consumer-passed raw statements may contain user data).
+- Property values returned from the database.
+
+The xmldoc on every `*Diagnostics` class restates this discipline. New tags added to existing spans should be reviewed against it.
+
+---
+
+## 13. Testing architecture
 
 The test projects mirror the places functionality lives — pure code lives in unit tests, behaviour every provider must satisfy lives in the conformance suite, and each provider has its own integration project that runs the suite end-to-end.
 
-### 12.1 Unit tests
+### 13.1 Unit tests
 
 Two unit-test projects cover the pure code.
 
@@ -795,7 +868,7 @@ The fixture file `TestFixtures.cs` ships a tiny `Author`/`Post`/`Comment` plus `
 
 All three unit-test projects run without any external dependency.
 
-### 12.2 Conformance suite: `OnixLabs.ElementFramework.Conformance`
+### 13.2 Conformance suite: `OnixLabs.ElementFramework.Conformance`
 
 A non-test library that ships:
 
@@ -807,19 +880,19 @@ Each concrete provider integration project (`InMemory.IntegrationTests`, `Neo4j.
 
 The in-memory and AGE projects each skip four conformance tests that assert on raw-Cypher semantics — the in-memory provider doesn't speak Cypher at all, and AGE's raw surface is SQL-wrapped Cypher rather than bare Cypher.
 
-### 12.3 Provider integration tests
+### 13.3 Provider integration tests
 
 - `OnixLabs.ElementFramework.InMemory.IntegrationTests` — runs the conformance suite in-process against a fresh in-memory store registered per test.
 - `OnixLabs.ElementFramework.Neo4j.IntegrationTests` — runs the same conformance suite against a real Neo4j 5.x container managed by Testcontainers. Slow but real.
 - `OnixLabs.ElementFramework.AGE.IntegrationTests` — runs the same conformance suite against an Apache AGE container (`apache/age:release_PG16_1.6.0`) managed by Testcontainers. The same project also hosts the agtype reconnaissance probes (`AgeReconnaissanceTests`, `AgeReconnaissanceFixture`) that established how the agtype wire format behaves through Npgsql — these are retained as living documentation of the decisions encoded in the provider.
 
-### 12.4 CI
+### 13.4 CI
 
 `.github/workflows/ci.yml` runs six test steps in sequence: build → abstraction unit tests → Neo4j-provider unit tests → AGE-provider unit tests → in-memory conformance → Neo4j conformance → AGE conformance (the unit and in-memory passes fail fast on a regression before Docker is even started, shaving minutes off failed PRs). The publish step packs all five NuGet artefacts.
 
 ---
 
-## 13. Adding a new provider
+## 14. Adding a new provider
 
 A new provider needs:
 
@@ -836,11 +909,11 @@ Conventions to honour:
 - **Transactional routing:** the executor must consult `opener.Active` to decide whether to run inside the ambient transaction or open a fresh auto-commit scope. The framework will not pass the transaction handle through.
 - **One ambient at a time:** the opener must throw `GraphTransactionAlreadyActiveException` when `Open()` is called and `Active` is non-null.
 
-The architecture is well-shaped for Cypher-family stores — Neo4j (Bolt) and Apache AGE (Postgres + agtype) are both built against this seam. For non-Cypher backends (Gremlin, SPARQL), the predicate tree and traversal AST work, but the linear segment list assumes a Cypher-style path. See [§14](#14-known-constraints-and-non-goals).
+The architecture is well-shaped for Cypher-family stores — Neo4j (Bolt) and Apache AGE (Postgres + agtype) are both built against this seam. For non-Cypher backends (Gremlin, SPARQL), the predicate tree and traversal AST work, but the linear segment list assumes a Cypher-style path. See [§15](#15-known-constraints-and-non-goals).
 
 ---
 
-## 14. Known constraints and non-goals
+## 15. Known constraints and non-goals
 
 This is the architectural counterpart to [`docs/production-readiness.md`](production-readiness.md), which is the operational view. Read both together.
 

@@ -20,6 +20,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
+using System.Diagnostics;
 using Microsoft.Extensions.DependencyInjection;
 using OnixLabs.ElementFramework.Conformance.TestFixtures.BlogApplication;
 using Xunit.Abstractions;
@@ -47,6 +48,21 @@ public abstract class AbstractGraphContextIntegrationTests(ITestOutputHelper out
         _ = Context.RawStatement.Execute("MATCH (n) DETACH DELETE n", new Dictionary<string, object?>());
         return Task.CompletedTask;
     }
+
+    /// <summary>
+    /// Gets the provider's <see cref="ActivitySource"/> name, or <see langword="null"/> when the provider does not emit its own spans. Used by the diagnostics conformance test to assert that provider-level spans surface alongside the framework's; the default of <see langword="null"/> matches the in-memory provider, which does not instrument.
+    /// </summary>
+    protected virtual string? ProviderSourceName => null;
+
+    /// <summary>
+    /// Gets the operation name of a provider-level execute span the conformance test expects to see when the provider source is set. Defaults to the convention used by both shipping Cypher providers (<c>{ProviderSourceName-suffix}.ExecuteStatement</c>); overrides are rarely needed.
+    /// </summary>
+    protected virtual string ProviderExecuteSpanName => ProviderSourceName switch
+    {
+        "OnixLabs.ElementFramework.Neo4j" => "Neo4j.ExecuteStatement",
+        "OnixLabs.ElementFramework.AGE" => "AGE.ExecuteStatement",
+        _ => string.Empty
+    };
 
     [Fact(DisplayName = "Nodes.Add followed by SaveChanges should add a node")]
     public void NodesAddShouldAddANode()
@@ -420,6 +436,42 @@ public abstract class AbstractGraphContextIntegrationTests(ITestOutputHelper out
         Assert.Equal(2, materialized.Length);
         Assert.Equal("Bob", materialized[0].Name);
         Assert.Equal("Charlie", materialized[1].Name);
+    }
+
+    [Fact(DisplayName = "Explicit BeginTransaction + SaveChanges + Commit emits the framework span hierarchy (plus provider spans when applicable)")]
+    public async Task DiagnosticsSpansAreEmittedAcrossTheTransactionLifecycle()
+    {
+        // The auto-flush path inside ChangeTracker bypasses the instrumented GraphTransactionFactory
+        // by design (so the framework can preserve pending operations across an auto-flush rollback),
+        // so this test drives an explicit BeginTransaction / SaveChanges / Commit cycle to assert
+        // every framework span fires once at its expected point.
+        List<Activity> captured = [];
+        HashSet<string> sources = ["OnixLabs.ElementFramework"];
+        if (ProviderSourceName is not null) sources.Add(ProviderSourceName);
+
+        using ActivityListener listener = new()
+        {
+            ShouldListenTo = source => sources.Contains(source.Name),
+            Sample = (ref ActivityCreationOptions<ActivityContext> _) => ActivitySamplingResult.AllDataAndRecorded,
+            ActivityStopped = activity => captured.Add(activity)
+        };
+        ActivitySource.AddActivityListener(listener);
+
+        await using (IGraphTransaction transaction = await Context.BeginTransactionAsync())
+        {
+            Context.Nodes<Author>().Add(Author.Create("Alice"));
+            await Context.SaveChangesAsync();
+            await transaction.CommitAsync();
+        }
+
+        Assert.Contains(captured, a => a.OperationName == "ElementFramework.BeginTransaction" && a.Status == ActivityStatusCode.Ok);
+        Assert.Contains(captured, a => a.OperationName == "ElementFramework.SaveChanges" && a.Status == ActivityStatusCode.Ok);
+        Assert.Contains(captured, a => a.OperationName == "ElementFramework.Transaction.Commit" && a.Status == ActivityStatusCode.Ok);
+
+        if (ProviderSourceName is not null)
+        {
+            Assert.Contains(captured, a => a.OperationName == ProviderExecuteSpanName && a.Status == ActivityStatusCode.Ok);
+        }
     }
 
     [Fact(DisplayName = "ReturnAsync releases provider resources when the enumerator is disposed mid-stream")]

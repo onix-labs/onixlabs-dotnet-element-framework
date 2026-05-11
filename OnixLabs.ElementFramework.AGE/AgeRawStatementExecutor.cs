@@ -20,6 +20,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
+using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using Microsoft.Extensions.Logging;
 using Npgsql;
@@ -122,16 +123,21 @@ internal sealed class AgeRawStatementExecutor : IRawStatementExecutor
             ambientCommand.AllResultTypesAreUnknown = true;
 
             NpgsqlDataReader ambientReader;
-            try
+            using (Activity? activity = StartExecuteActivity("ambient", parameters.Count))
             {
-                logger.LogDebug("Executing AGE statement within ambient transaction ({ParameterCount} parameters): {Statement}", parameters.Count, sql);
-                ambientReader = await ambientCommand.ExecuteReaderAsync(token).ConfigureAwait(false);
-            }
-            catch (Exception exception)
-            {
-                logger.LogWarning(exception, "Failed to execute AGE statement: {Statement}", sql);
-                throw new RawStatementException(
-                    "Failed to execute the supplied statement against the Apache AGE endpoint.", exception);
+                try
+                {
+                    logger.LogDebug("Executing AGE statement within ambient transaction ({ParameterCount} parameters): {Statement}", parameters.Count, sql);
+                    ambientReader = await ambientCommand.ExecuteReaderAsync(token).ConfigureAwait(false);
+                    RecordExecuteSuccess(activity, "ambient");
+                }
+                catch (Exception exception)
+                {
+                    RecordExecuteFailure(activity, "ambient", exception);
+                    logger.LogWarning(exception, "Failed to execute AGE statement: {Statement}", sql);
+                    throw new RawStatementException(
+                        "Failed to execute the supplied statement against the Apache AGE endpoint.", exception);
+                }
             }
 
             await using (ambientReader.ConfigureAwait(false))
@@ -153,16 +159,21 @@ internal sealed class AgeRawStatementExecutor : IRawStatementExecutor
         command.AllResultTypesAreUnknown = true;
 
         NpgsqlDataReader reader;
-        try
+        using (Activity? activity = StartExecuteActivity("auto", parameters.Count))
         {
-            logger.LogDebug("Executing AGE statement on auto-commit connection ({ParameterCount} parameters): {Statement}", parameters.Count, sql);
-            reader = await command.ExecuteReaderAsync(token).ConfigureAwait(false);
-        }
-        catch (Exception exception)
-        {
-            logger.LogWarning(exception, "Failed to execute AGE statement: {Statement}", sql);
-            throw new RawStatementException(
-                "Failed to execute the supplied statement against the Apache AGE endpoint.", exception);
+            try
+            {
+                logger.LogDebug("Executing AGE statement on auto-commit connection ({ParameterCount} parameters): {Statement}", parameters.Count, sql);
+                reader = await command.ExecuteReaderAsync(token).ConfigureAwait(false);
+                RecordExecuteSuccess(activity, "auto");
+            }
+            catch (Exception exception)
+            {
+                RecordExecuteFailure(activity, "auto", exception);
+                logger.LogWarning(exception, "Failed to execute AGE statement: {Statement}", sql);
+                throw new RawStatementException(
+                    "Failed to execute the supplied statement against the Apache AGE endpoint.", exception);
+            }
         }
 
         await using (reader.ConfigureAwait(false))
@@ -170,6 +181,41 @@ internal sealed class AgeRawStatementExecutor : IRawStatementExecutor
             while (await reader.ReadAsync(token).ConfigureAwait(false))
                 yield return await ReadRowAsync(reader, token).ConfigureAwait(false);
         }
+    }
+
+    /// <summary>
+    /// Starts an <c>AGE.ExecuteStatement</c> span tagged with the parameter count and routing mode. The span covers only the open-reader phase — once Npgsql returns the reader, the span ends and streaming proceeds without an open activity (Npgsql's own <see cref="ActivitySource"/> covers the wire-layer fetches).
+    /// </summary>
+    private static Activity? StartExecuteActivity(string mode, int parameterCount)
+    {
+        Activity? activity = AgeDiagnostics.Source.StartActivity("AGE.ExecuteStatement", ActivityKind.Client);
+        activity?.SetTag("elementframework.parameter.count", parameterCount);
+        activity?.SetTag("elementframework.transaction.mode", mode);
+        activity?.SetTag("db.system", "postgresql");
+        return activity;
+    }
+
+    /// <summary>
+    /// Marks the supplied <paramref name="activity"/> as successful and ticks the statements counter with the success outcome.
+    /// </summary>
+    private static void RecordExecuteSuccess(Activity? activity, string mode)
+    {
+        activity?.SetStatus(ActivityStatusCode.Ok);
+        AgeDiagnostics.StatementsCounter.Add(1,
+            new KeyValuePair<string, object?>("elementframework.transaction.mode", mode),
+            new KeyValuePair<string, object?>("outcome", "success"));
+    }
+
+    /// <summary>
+    /// Marks the supplied <paramref name="activity"/> as failed (status + exception.type tag) and ticks the statements counter with the failure outcome.
+    /// </summary>
+    private static void RecordExecuteFailure(Activity? activity, string mode, Exception exception)
+    {
+        activity?.SetStatus(ActivityStatusCode.Error, exception.Message);
+        activity?.SetTag("exception.type", exception.GetType().FullName);
+        AgeDiagnostics.StatementsCounter.Add(1,
+            new KeyValuePair<string, object?>("elementframework.transaction.mode", mode),
+            new KeyValuePair<string, object?>("outcome", "failure"));
     }
 
     /// <summary>

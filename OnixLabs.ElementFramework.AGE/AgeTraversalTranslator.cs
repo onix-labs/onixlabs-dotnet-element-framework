@@ -20,6 +20,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
+using System.Diagnostics;
 using System.Runtime.CompilerServices;
 
 namespace OnixLabs.ElementFramework;
@@ -38,6 +39,7 @@ internal sealed class AgeTraversalTranslator(
     /// <inheritdoc/>
     public IEnumerable<TResult> Translate<TResult>(IGraphModel model, TraversalAst ast)
     {
+        using Activity? activity = StartTranslateActivity(ast);
         IEnumerable<IReadOnlyDictionary<string, object?>> rows;
         ReturnKind kind;
 
@@ -49,6 +51,7 @@ internal sealed class AgeTraversalTranslator(
         }
         catch (Exception exception)
         {
+            RecordTranslateFailure(activity, exception);
             throw new TraversalTranslationException("Failed to translate or execute the supplied fluent traversal against the Apache AGE endpoint.", exception);
         }
 
@@ -61,9 +64,11 @@ internal sealed class AgeTraversalTranslator(
         }
         catch (Exception exception)
         {
+            RecordTranslateFailure(activity, exception);
             throw new TraversalTranslationException("Failed to translate or execute the supplied fluent traversal against the Apache AGE endpoint.", exception);
         }
 
+        activity?.SetStatus(ActivityStatusCode.Ok);
         return results;
     }
 
@@ -76,6 +81,7 @@ internal sealed class AgeTraversalTranslator(
         TraversalAst ast,
         [EnumeratorCancellation] CancellationToken token)
     {
+        Activity? activity = StartTranslateActivity(ast);
         IAsyncEnumerable<IReadOnlyDictionary<string, object?>> rows;
         ReturnKind kind;
 
@@ -84,14 +90,44 @@ internal sealed class AgeTraversalTranslator(
             DataStatement statement = emitter.EmitTraversal(model, ast);
             rows = executor.ExecuteAsync(statement.Statement, statement.Parameters, token);
             kind = ResolveReturnKind(ast);
+            activity?.SetStatus(ActivityStatusCode.Ok);
         }
         catch (Exception exception)
         {
+            RecordTranslateFailure(activity, exception);
+            activity?.Dispose();
             throw new TraversalTranslationException("Failed to translate or execute the supplied fluent traversal against the Apache AGE endpoint.", exception);
         }
 
+        // Span ends after translation + execute kickoff. Downstream enumeration is covered by the
+        // executor's ExecuteStatement span (and Npgsql's wire-layer ActivitySource).
+        activity?.Dispose();
+
         await foreach (IReadOnlyDictionary<string, object?> row in rows.WithCancellation(token).ConfigureAwait(false))
             yield return Materialize<TResult>(model, row, ast.ReturnAlias, kind);
+    }
+
+    /// <summary>
+    /// Starts an <c>AGE.TranslateTraversal</c> span tagged with the traversal kind, segment count, and return alias.
+    /// </summary>
+    private static Activity? StartTranslateActivity(TraversalAst ast)
+    {
+        Activity? activity = AgeDiagnostics.Source.StartActivity("AGE.TranslateTraversal", ActivityKind.Internal);
+        activity?.SetTag("elementframework.traversal.kind", ast.Kind.ToString());
+        activity?.SetTag("elementframework.traversal.segment_count", ast.Segments.Count);
+        activity?.SetTag("elementframework.traversal.predicate_count", ast.Predicates.Count);
+        activity?.SetTag("elementframework.traversal.return_alias", ast.ReturnAlias);
+        activity?.SetTag("db.system", "postgresql");
+        return activity;
+    }
+
+    /// <summary>
+    /// Marks the supplied <paramref name="activity"/> as failed with status + exception type.
+    /// </summary>
+    private static void RecordTranslateFailure(Activity? activity, Exception exception)
+    {
+        activity?.SetStatus(ActivityStatusCode.Error, exception.Message);
+        activity?.SetTag("exception.type", exception.GetType().FullName);
     }
 
     private TResult Materialize<TResult>(
