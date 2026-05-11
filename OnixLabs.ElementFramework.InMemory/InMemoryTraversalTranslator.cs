@@ -66,16 +66,61 @@ internal sealed class InMemoryTraversalTranslator(InMemoryGraphTransactionOpener
     /// <typeparam name="TResult">The CLR type the return alias projects into.</typeparam>
     /// <param name="model">The frozen graph model.</param>
     /// <param name="ast">The traversal AST.</param>
-    /// <returns>Returns every projected match.</returns>
+    /// <returns>Returns every projected match, after applying any ordering, skip, and limit clauses.</returns>
     private IEnumerable<TResult> ExecuteMatch<TResult>(IGraphModel model, TraversalAst ast)
     {
-        List<TResult> results = [];
+        List<Dictionary<string, object>> filtered = [];
         foreach (Dictionary<string, object> binding in EnumerateBindings(model, ast))
         {
             if (!PredicatesMatch(ast.Predicates, binding)) continue;
-            results.Add(Project<TResult>(binding, ast.ReturnAlias));
+            filtered.Add(binding);
         }
+
+        IEnumerable<Dictionary<string, object>> sequence = ApplyOrdering(filtered, ast.Orderings);
+        if (ast.Skip is int skip) sequence = sequence.Skip(skip);
+        if (ast.Take is int take) sequence = sequence.Take(take);
+
+        List<TResult> results = [];
+        foreach (Dictionary<string, object> binding in sequence)
+            results.Add(Project<TResult>(binding, ast.ReturnAlias));
         return results;
+    }
+
+    /// <summary>
+    /// Applies the ordering clauses from <paramref name="orderings"/> to <paramref name="bindings"/>. v1 supports a single ordering clause; when <paramref name="orderings"/> is empty the sequence is returned unchanged.
+    /// </summary>
+    /// <param name="bindings">The filtered bindings to order.</param>
+    /// <param name="orderings">The ordering clauses from the AST.</param>
+    /// <returns>Returns the ordered (or original) sequence.</returns>
+    private static IEnumerable<Dictionary<string, object>> ApplyOrdering(
+        IReadOnlyList<Dictionary<string, object>> bindings,
+        IReadOnlyList<TraversalOrdering> orderings)
+    {
+        if (orderings.Count == 0) return bindings;
+
+        TraversalOrdering ordering = orderings[0];
+        Comparer<object?> comparer = Comparer<object?>.Default;
+        int factor = ordering.Direction == OrderDirection.Descending ? -1 : 1;
+        return bindings
+            .OrderBy(b => ReadOrderingKey(b, ordering), Comparer<object?>.Create((x, y) => factor * comparer.Compare(x, y)));
+    }
+
+    /// <summary>
+    /// Reads the ordering key value from <paramref name="binding"/> at the ordering's alias and property. Returns <see langword="null"/> when the alias is unbound (the ordering clause is otherwise opaque to the binding shape).
+    /// </summary>
+    /// <param name="binding">The binding to read from.</param>
+    /// <param name="ordering">The ordering clause whose key value is being resolved.</param>
+    /// <returns>Returns the property value used as the ordering key.</returns>
+    /// <exception cref="TraversalTranslationException">Thrown when the alias is unbound or the property is missing on the bound type.</exception>
+    private static object? ReadOrderingKey(Dictionary<string, object> binding, TraversalOrdering ordering)
+    {
+        if (!binding.TryGetValue(ordering.Alias, out object? bound))
+            throw new TraversalTranslationException($"OrderBy references unbound alias '{ordering.Alias}'.");
+        PropertyInfo? property = bound.GetType().GetProperty(ordering.ClrPropertyName);
+        if (property is null)
+            throw new TraversalTranslationException(
+                $"OrderBy references property '{ordering.ClrPropertyName}' which is not present on alias '{ordering.Alias}'.");
+        return property.GetValue(bound);
     }
 
     /// <summary>

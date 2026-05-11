@@ -305,6 +305,123 @@ public abstract class AbstractGraphContextIntegrationTests(ITestOutputHelper out
         Assert.Equal(2, materialized.Length);
     }
 
+    [Fact(DisplayName = "Traversal Match with OrderBy should yield nodes in ascending order of the keyed property")]
+    public void TraversalOrderByAscending()
+    {
+        Author charlie = Author.Create("Charlie");
+        Author alice = Author.Create("Alice");
+        Author bob = Author.Create("Bob");
+        Context.Nodes<Author>().Add(charlie);
+        Context.Nodes<Author>().Add(alice);
+        Context.Nodes<Author>().Add(bob);
+        Context.SaveChanges();
+
+        Author[] materialized = [.. Context.Traversal
+            .Match()
+            .Node<Author>("a")
+            .OrderBy(a => a.Name)
+            .Return<Author>("a")];
+
+        Assert.Equal(3, materialized.Length);
+        Assert.Equal("Alice", materialized[0].Name);
+        Assert.Equal("Bob", materialized[1].Name);
+        Assert.Equal("Charlie", materialized[2].Name);
+    }
+
+    [Fact(DisplayName = "Traversal Match with OrderByDescending should yield nodes in descending order")]
+    public void TraversalOrderByDescending()
+    {
+        Author alice = Author.Create("Alice");
+        Author bob = Author.Create("Bob");
+        Author charlie = Author.Create("Charlie");
+        Context.Nodes<Author>().Add(alice);
+        Context.Nodes<Author>().Add(bob);
+        Context.Nodes<Author>().Add(charlie);
+        Context.SaveChanges();
+
+        Author[] materialized = [.. Context.Traversal
+            .Match()
+            .Node<Author>("a")
+            .OrderByDescending(a => a.Name)
+            .Return<Author>("a")];
+
+        Assert.Equal("Charlie", materialized[0].Name);
+        Assert.Equal("Bob", materialized[1].Name);
+        Assert.Equal("Alice", materialized[2].Name);
+    }
+
+    [Fact(DisplayName = "Traversal Match with Skip should drop the leading rows")]
+    public void TraversalSkip()
+    {
+        Author alice = Author.Create("Alice");
+        Author bob = Author.Create("Bob");
+        Author charlie = Author.Create("Charlie");
+        Context.Nodes<Author>().Add(alice);
+        Context.Nodes<Author>().Add(bob);
+        Context.Nodes<Author>().Add(charlie);
+        Context.SaveChanges();
+
+        Author[] materialized = [.. Context.Traversal
+            .Match()
+            .Node<Author>("a")
+            .OrderBy(a => a.Name)
+            .Skip(1)
+            .Return<Author>("a")];
+
+        Assert.Equal(2, materialized.Length);
+        Assert.Equal("Bob", materialized[0].Name);
+        Assert.Equal("Charlie", materialized[1].Name);
+    }
+
+    [Fact(DisplayName = "Traversal Match with Take should cap the result count")]
+    public void TraversalTake()
+    {
+        Author alice = Author.Create("Alice");
+        Author bob = Author.Create("Bob");
+        Author charlie = Author.Create("Charlie");
+        Context.Nodes<Author>().Add(alice);
+        Context.Nodes<Author>().Add(bob);
+        Context.Nodes<Author>().Add(charlie);
+        Context.SaveChanges();
+
+        Author[] materialized = [.. Context.Traversal
+            .Match()
+            .Node<Author>("a")
+            .OrderBy(a => a.Name)
+            .Take(2)
+            .Return<Author>("a")];
+
+        Assert.Equal(2, materialized.Length);
+        Assert.Equal("Alice", materialized[0].Name);
+        Assert.Equal("Bob", materialized[1].Name);
+    }
+
+    [Fact(DisplayName = "Traversal Match with OrderBy + Skip + Take returns a paged window of the ordered set")]
+    public void TraversalOrderByWithSkipAndTake()
+    {
+        Author alice = Author.Create("Alice");
+        Author bob = Author.Create("Bob");
+        Author charlie = Author.Create("Charlie");
+        Author dora = Author.Create("Dora");
+        Context.Nodes<Author>().Add(alice);
+        Context.Nodes<Author>().Add(bob);
+        Context.Nodes<Author>().Add(charlie);
+        Context.Nodes<Author>().Add(dora);
+        Context.SaveChanges();
+
+        Author[] materialized = [.. Context.Traversal
+            .Match()
+            .Node<Author>("a")
+            .OrderBy(a => a.Name)
+            .Skip(1)
+            .Take(2)
+            .Return<Author>("a")];
+
+        Assert.Equal(2, materialized.Length);
+        Assert.Equal("Bob", materialized[0].Name);
+        Assert.Equal("Charlie", materialized[1].Name);
+    }
+
     [Fact(DisplayName = "RawStatement Execute should return result rows")]
     public virtual void RawStatementExecuteShouldReturnResultRows()
     {

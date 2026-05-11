@@ -62,4 +62,22 @@ internal sealed class TraversalState(TraversalKind kind, IGraphModel model, ITra
     /// </summary>
     /// <value>The mutable list of accumulated <see cref="TraversalPredicate"/> values.</value>
     public List<TraversalPredicate> Predicates { get; } = [];
+
+    /// <summary>
+    /// Gets the accumulating list of ordering clauses. v1 admits at most one entry; <see cref="PatternNode{TNode}"/> enforces this by throwing on the second <c>OrderBy</c> / <c>OrderByDescending</c> call.
+    /// </summary>
+    /// <value>The mutable list of accumulated <see cref="TraversalOrdering"/> values.</value>
+    public List<TraversalOrdering> Orderings { get; } = [];
+
+    /// <summary>
+    /// Gets or sets the number of leading rows the traversal skips, or <see langword="null"/> when no <c>Skip</c> was applied.
+    /// </summary>
+    /// <value>A non-negative row count, or <see langword="null"/>.</value>
+    public int? Skip { get; set; }
+
+    /// <summary>
+    /// Gets or sets the maximum number of rows the traversal returns, or <see langword="null"/> when no <c>Take</c> was applied.
+    /// </summary>
+    /// <value>A non-negative row count, or <see langword="null"/>.</value>
+    public int? Take { get; set; }
 }

@@ -280,7 +280,30 @@ internal sealed class CypherEmitter : IStatementEmitter
         }
 
         builder.Append(" RETURN ").Append(CypherIdentifier.Escape(ast.ReturnAlias));
+        AppendOrderingSkipLimit(builder, model, ast);
         return new DataStatement(builder.ToString(), binder.ToParameters());
+    }
+
+    /// <summary>
+    /// Appends the optional <c>ORDER BY</c> / <c>SKIP</c> / <c>LIMIT</c> tail clauses to <paramref name="builder"/> in that order, when the AST has them set. Cypher requires the canonical order ORDER BY → SKIP → LIMIT and applies SKIP / LIMIT against the ordered result; the framework's fluent builder accepts these in any order at the call site, so this method is the single source of truth for emission ordering.
+    /// </summary>
+    /// <param name="builder">The <see cref="StringBuilder"/> that receives the appended tail.</param>
+    /// <param name="model">The graph model used to resolve the ordering property's storage name.</param>
+    /// <param name="ast">The traversal AST whose tail clauses are being emitted.</param>
+    private static void AppendOrderingSkipLimit(StringBuilder builder, IGraphModel model, TraversalAst ast)
+    {
+        foreach (TraversalOrdering ordering in ast.Orderings)
+        {
+            IPropertyMetadata property = ResolvePredicateProperty(model, ast, ordering.Alias, ordering.ClrPropertyName);
+            builder.Append(" ORDER BY ")
+                .Append(CypherIdentifier.Escape(ordering.Alias))
+                .Append('.')
+                .Append(CypherIdentifier.Escape(property.Name))
+                .Append(ordering.Direction == OrderDirection.Descending ? " DESC" : " ASC");
+        }
+
+        if (ast.Skip is int skip) builder.Append(" SKIP ").Append(skip);
+        if (ast.Take is int take) builder.Append(" LIMIT ").Append(take);
     }
 
     /// <summary>

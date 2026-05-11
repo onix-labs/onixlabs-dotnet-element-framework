@@ -315,7 +315,30 @@ internal sealed class AgeCypherEmitter : IStatementEmitter
         }
 
         builder.Append(" RETURN ").Append(CypherIdentifier.Escape(ast.ReturnAlias));
+        AppendOrderingSkipLimit(builder, model, ast);
         return Wrap(builder.ToString(), binder, ast.ReturnAlias);
+    }
+
+    /// <summary>
+    /// Appends the optional <c>ORDER BY</c> / <c>SKIP</c> / <c>LIMIT</c> tail clauses to <paramref name="builder"/> when the AST has them set. AGE accepts the same clause order Cypher requires.
+    /// </summary>
+    /// <param name="builder">The <see cref="StringBuilder"/> that receives the appended tail.</param>
+    /// <param name="model">The graph model used to resolve the ordering property's storage name.</param>
+    /// <param name="ast">The traversal AST whose tail clauses are being emitted.</param>
+    private static void AppendOrderingSkipLimit(StringBuilder builder, IGraphModel model, TraversalAst ast)
+    {
+        foreach (TraversalOrdering ordering in ast.Orderings)
+        {
+            IPropertyMetadata property = ResolvePredicateProperty(model, ast, ordering.Alias, ordering.ClrPropertyName);
+            builder.Append(" ORDER BY ")
+                .Append(CypherIdentifier.Escape(ordering.Alias))
+                .Append('.')
+                .Append(CypherIdentifier.Escape(property.Name))
+                .Append(ordering.Direction == OrderDirection.Descending ? " DESC" : " ASC");
+        }
+
+        if (ast.Skip is int skip) builder.Append(" SKIP ").Append(skip);
+        if (ast.Take is int take) builder.Append(" LIMIT ").Append(take);
     }
 
     /// <summary>

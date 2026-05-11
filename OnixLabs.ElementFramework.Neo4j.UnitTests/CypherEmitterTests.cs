@@ -363,6 +363,102 @@ public class CypherEmitterTests
         Assert.Equal("MATCH (a:Author) WHERE (a.Name = $Name) AND (a.JoinedAt > $JoinedAt) RETURN a", statement.Statement);
     }
 
+    [Fact(DisplayName = "EmitTraversal appends ORDER BY <alias>.<property> ASC for an ascending ordering")]
+    public void EmitTraversalAppendsAscendingOrdering()
+    {
+        TraversalAst ast = new(
+            TraversalKind.Match,
+            [new NodePatternSegment(typeof(Author), "a")],
+            [],
+            "a")
+        {
+            Orderings = [new TraversalOrdering("a", nameof(Author.Name), OrderDirection.Ascending)]
+        };
+
+        DataStatement statement = emitter.EmitTraversal(model, ast);
+
+        Assert.Equal("MATCH (a:Author) RETURN a ORDER BY a.Name ASC", statement.Statement);
+    }
+
+    [Fact(DisplayName = "EmitTraversal appends ORDER BY <alias>.<property> DESC for a descending ordering")]
+    public void EmitTraversalAppendsDescendingOrdering()
+    {
+        TraversalAst ast = new(
+            TraversalKind.Match,
+            [new NodePatternSegment(typeof(Author), "a")],
+            [],
+            "a")
+        {
+            Orderings = [new TraversalOrdering("a", nameof(Author.Name), OrderDirection.Descending)]
+        };
+
+        DataStatement statement = emitter.EmitTraversal(model, ast);
+
+        Assert.Equal("MATCH (a:Author) RETURN a ORDER BY a.Name DESC", statement.Statement);
+    }
+
+    [Fact(DisplayName = "EmitTraversal appends SKIP n when the AST has a skip clause")]
+    public void EmitTraversalAppendsSkip()
+    {
+        TraversalAst ast = new(
+            TraversalKind.Match,
+            [new NodePatternSegment(typeof(Author), "a")],
+            [],
+            "a") { Skip = 5 };
+
+        DataStatement statement = emitter.EmitTraversal(model, ast);
+
+        Assert.Equal("MATCH (a:Author) RETURN a SKIP 5", statement.Statement);
+    }
+
+    [Fact(DisplayName = "EmitTraversal appends LIMIT n when the AST has a Take clause")]
+    public void EmitTraversalAppendsTakeAsLimit()
+    {
+        TraversalAst ast = new(
+            TraversalKind.Match,
+            [new NodePatternSegment(typeof(Author), "a")],
+            [],
+            "a") { Take = 10 };
+
+        DataStatement statement = emitter.EmitTraversal(model, ast);
+
+        Assert.Equal("MATCH (a:Author) RETURN a LIMIT 10", statement.Statement);
+    }
+
+    [Fact(DisplayName = "EmitTraversal emits ORDER BY before SKIP before LIMIT in the canonical Cypher order")]
+    public void EmitTraversalEmitsTailClausesInCanonicalOrder()
+    {
+        TraversalAst ast = new(
+            TraversalKind.Match,
+            [new NodePatternSegment(typeof(Author), "a")],
+            [],
+            "a")
+        {
+            Orderings = [new TraversalOrdering("a", nameof(Author.Name), OrderDirection.Ascending)],
+            Skip = 5,
+            Take = 10
+        };
+
+        DataStatement statement = emitter.EmitTraversal(model, ast);
+
+        Assert.Equal("MATCH (a:Author) RETURN a ORDER BY a.Name ASC SKIP 5 LIMIT 10", statement.Statement);
+    }
+
+    [Fact(DisplayName = "EmitTraversal throws StatementEmissionException when an ordering references an unbound alias")]
+    public void EmitTraversalThrowsForUnboundOrderingAlias()
+    {
+        TraversalAst ast = new(
+            TraversalKind.Match,
+            [new NodePatternSegment(typeof(Author), "a")],
+            [],
+            "a")
+        {
+            Orderings = [new TraversalOrdering("missing", nameof(Author.Name), OrderDirection.Ascending)]
+        };
+
+        Assert.Throws<StatementEmissionException>(() => emitter.EmitTraversal(model, ast));
+    }
+
     [Fact(DisplayName = "EmitTraversal throws StatementEmissionException when segments are empty")]
     public void EmitTraversalThrowsForEmptySegments()
     {

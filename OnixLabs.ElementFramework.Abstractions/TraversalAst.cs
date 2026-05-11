@@ -34,4 +34,23 @@ public sealed record TraversalAst(
     IReadOnlyList<PatternSegment> Segments,
     IReadOnlyList<TraversalPredicate> Predicates,
     string ReturnAlias
-);
+)
+{
+    /// <summary>
+    /// Gets the ordering clauses accumulated from <c>OrderBy</c> / <c>OrderByDescending</c>. Empty when no ordering was applied.
+    /// </summary>
+    /// <value>The ordering clauses, in the order the builder accumulated them. v1 fluent builders accumulate at most one entry.</value>
+    public IReadOnlyList<TraversalOrdering> Orderings { get; init; } = [];
+
+    /// <summary>
+    /// Gets the number of leading rows the traversal skips, or <see langword="null"/> when no <c>Skip</c> was applied.
+    /// </summary>
+    /// <value>A non-negative row count, or <see langword="null"/>.</value>
+    public int? Skip { get; init; }
+
+    /// <summary>
+    /// Gets the maximum number of rows the traversal returns, or <see langword="null"/> when no <c>Take</c> was applied.
+    /// </summary>
+    /// <value>A non-negative row count, or <see langword="null"/>.</value>
+    public int? Take { get; init; }
+}
