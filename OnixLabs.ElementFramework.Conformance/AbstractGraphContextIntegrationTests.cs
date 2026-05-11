@@ -422,6 +422,49 @@ public abstract class AbstractGraphContextIntegrationTests(ITestOutputHelper out
         Assert.Equal("Charlie", materialized[1].Name);
     }
 
+    [Fact(DisplayName = "ReturnAsync releases provider resources when the enumerator is disposed mid-stream")]
+    public async Task ReturnAsyncReleasesResourcesOnEarlyBreak()
+    {
+        Author alice = Author.Create("Alice");
+        Author bob = Author.Create("Bob");
+        Author charlie = Author.Create("Charlie");
+        Context.Nodes<Author>().Add(alice);
+        Context.Nodes<Author>().Add(bob);
+        Context.Nodes<Author>().Add(charlie);
+        await Context.SaveChangesAsync();
+
+        // Exit after the first row — the executor must dispose its cursor / reader / session
+        // (or connection) so a second async query against the same context completes successfully.
+        // Under eager materialization this is trivially true. Under lazy streaming, this is a
+        // genuine resource-management assertion: a broken implementation would either leak the
+        // resource (eventually exhausting the pool) or hold the connection past the enumerator's
+        // disposal (causing the second call to block or fail).
+        await foreach (Author author in Context.Traversal
+            .Match()
+            .Node<Author>("a")
+            .OrderBy(a => a.Name)
+            .ReturnAsync<Author>("a"))
+        {
+            Assert.Equal("Alice", author.Name);
+            break;
+        }
+
+        List<Author> drained = [];
+        await foreach (Author author in Context.Traversal
+            .Match()
+            .Node<Author>("a")
+            .OrderBy(a => a.Name)
+            .ReturnAsync<Author>("a"))
+        {
+            drained.Add(author);
+        }
+
+        Assert.Equal(3, drained.Count);
+        Assert.Equal("Alice", drained[0].Name);
+        Assert.Equal("Bob", drained[1].Name);
+        Assert.Equal("Charlie", drained[2].Name);
+    }
+
     [Fact(DisplayName = "RawStatement Execute should return result rows")]
     public virtual void RawStatementExecuteShouldReturnResultRows()
     {

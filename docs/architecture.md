@@ -530,7 +530,9 @@ The executor is the only place in the provider that talks to Bolt. Its job:
 2. If `opener.Active` is a `Neo4jGraphTransaction`, run through that transaction's `IAsyncTransaction.RunAsync`. Otherwise, open a fresh `IAsyncSession`, run, close.
 3. Drain the `IResultCursor` into a `List<IReadOnlyDictionary<string, object?>>` and return it.
 
-**Eager materialization on the async path.** `RunAsync` reads the entire cursor before returning. This is intentional — the comment in the file ("faults during the round-trip surface immediately") reflects a deliberate choice that surfacing exceptions at execute time is more debuggable than at enumeration time, but it also means the `IAsyncEnumerable` is a façade and queries returning millions of rows will OOM. Flagged in production-readiness.
+**Lazy async streaming.** `ExecuteAsync` is a genuine async iterator — the `IResultCursor` is iterated as the consumer pulls rows, and the auto-commit `IAsyncSession` is held open via `await using` for the lifetime of the enumerator. Disposing the enumerator (`await foreach` completing, a `break` mid-stream, or a thrown exception unwinding past it) closes the session immediately. Open-time failures still surface as `RawStatementException`; mid-stream driver exceptions during enumeration propagate raw — the price the async surface pays for not OOMing on large result sets.
+
+**Sync surface materializes eagerly.** `Execute` drains the entire stream into a list before returning, so sync consumers see the pre-streaming exception model (every failure surfaces at execute time, wrapped). Both surfaces route through the same `StreamAsync` primitive; `MaterializeAllAsync` is the eager adapter.
 
 **Sync surface bridges via `GetAwaiter().GetResult()`.** The Neo4j driver is async-only; the sync methods bridge through a non-context-preserving block. Under hosts that capture a synchronization context (ASP.NET Classic, WinForms, WPF), this deadlocks. ASP.NET Core and console hosts are unaffected. The `UseNeo4j` xmldoc documents this; production-readiness recommends shipping a Roslyn analyzer to warn under risky SDKs.
 
@@ -632,7 +634,7 @@ The executor is the only place in the provider that talks to Postgres. Its job:
 3. **Set `command.AllResultTypesAreUnknown = true`** before executing. This is the single most important line in the provider: it tells Npgsql to return every column as a `string` at the protocol level rather than trying to map it to a CLR type. Without it, the `ag_catalog.agtype` columns AGE emits cannot be read at all — Npgsql doesn't ship an `agtype` reader, and `GetValue` / `GetFieldValue<string>` both throw.
 4. Drain the `NpgsqlDataReader` into a `List<IReadOnlyDictionary<string, object?>>` where every cell is a string (or null).
 
-Eager materialization on the async path and sync-over-async bridging both follow Neo4j's pattern and carry the same caveats.
+Lazy async streaming and sync-over-async bridging both follow Neo4j's pattern. The async path yields rows as the consumer pulls them; the auto-commit `NpgsqlConnection` (and its command + reader) is held via `await using` for the lifetime of the enumerator and returned to the data-source pool on enumerator dispose. The sync path eagerly drains the same stream into a list before returning.
 
 ### 10.5 Transactions: `AgeGraphTransactionOpener`, `AgeGraphTransaction`
 
@@ -845,8 +847,8 @@ The framework consumes `ILoggerFactory` (set via `GraphContextOptionsBuilder.Use
 **Sync-over-async surface (Neo4j and AGE).**
 Both the Neo4j driver and Npgsql are async-first; the providers' sync surfaces bridge via `GetAwaiter().GetResult()`. This deadlocks under hosts that capture a synchronization context (ASP.NET Classic, WinForms, WPF). Use the async surface in those hosts. ASP.NET Core, console, and modern hosted-service consumers are unaffected.
 
-**Eager row materialization (Neo4j and AGE).**
-`IAsyncEnumerable` is currently a façade — both providers drain their cursor / reader before returning. Queries returning very large result sets will OOM. The design is intentional (faults surface at execute time, not enumeration time) but the trade-off is honest.
+**Async path streams; sync path materializes eagerly (Neo4j and AGE).**
+`ExecuteAsync` is a genuine async iterator — both providers yield rows as the consumer pulls them, and the underlying cursor / reader / session / connection is held via `await using` for the lifetime of the enumerator. The consequence is a behaviour split: open-time failures (the initial cursor / reader call) still surface as `RawStatementException`, but mid-stream failures during enumeration propagate as raw driver exceptions. The sync `Execute` surface drains the same stream into a list before returning, so sync consumers see the pre-streaming exception model.
 
 **In-memory provider is not for production.**
 No thread-safety on the store, no eviction in the registry, no persistence, no query optimization. It exists for unit-test scenarios in consumer code and for keeping the abstraction honest about non-Cypher providers.
