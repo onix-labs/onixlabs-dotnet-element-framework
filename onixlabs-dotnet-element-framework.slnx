@@ -13,6 +13,7 @@
     <Project Path="OnixLabs.ElementFramework.Conformance/OnixLabs.ElementFramework.Conformance.csproj" />
     <Project Path="OnixLabs.ElementFramework.InMemory.IntegrationTests/OnixLabs.ElementFramework.InMemory.IntegrationTests.csproj" />
     <Project Path="OnixLabs.ElementFramework.Neo4j.IntegrationTests/OnixLabs.ElementFramework.Neo4j.IntegrationTests.csproj" />
+    <Project Path="OnixLabs.ElementFramework.AGE.UnitTests/OnixLabs.ElementFramework.AGE.UnitTests.csproj" />
     <Project Path="OnixLabs.ElementFramework.Neo4j.UnitTests/OnixLabs.ElementFramework.Neo4j.UnitTests.csproj" />
     <Project Path="OnixLabs.ElementFramework.UnitTests/OnixLabs.ElementFramework.UnitTests.csproj" />
   </Folder>

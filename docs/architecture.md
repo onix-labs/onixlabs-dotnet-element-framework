@@ -37,7 +37,7 @@ Three big-picture qualities to keep in mind while reading the rest of this docum
 
 ## 2. Solution layout
 
-The solution is five production projects plus five test projects.
+The solution is five production projects plus six test projects.
 
 ```
 onixlabs-dotnet-element-framework/
@@ -52,6 +52,8 @@ onixlabs-dotnet-element-framework/
 │
 ├── OnixLabs.ElementFramework.UnitTests/             - Unit tests for the default impl.
 ├── OnixLabs.ElementFramework.Neo4j.UnitTests/       - Unit tests for the Neo4j provider's
+│                                                      pure functions.
+├── OnixLabs.ElementFramework.AGE.UnitTests/         - Unit tests for the AGE provider's
 │                                                      pure functions.
 ├── OnixLabs.ElementFramework.Conformance/           - Provider-agnostic integration
 │                                                      tests; subclassed per provider.
@@ -781,7 +783,17 @@ The fixture file `TestFixtures.cs` ships a tiny `Author`/`Post`/`Comment` plus `
 - `CypherEmitter` — every emit method (`EmitAdd`/`EmitUpdate`/`EmitRemove`/`EmitMerge`/`EmitConnect`/`EmitDisconnect`/`EmitFindById`/`EmitExists`/`EmitAsEnumerableNodes`/`EmitAsEnumerableEdges`) plus full `EmitTraversal` coverage of pattern direction emission, every comparison and string-comparison operator, null predicates, And/Or/Not parenthesisation, top-level conjunction joining, and the AST-validation throws.
 - `Neo4jResultMaterializer` — `Guid`/`DateTimeOffset`/enum conversions, primitive and long→int passthrough, nullable `Guid?`, default-on-missing properties, INode/IRelationship type assertions, alias-free and alias-bearing materialize methods, `ReadExists` with positive/zero/negative/non-long/missing counts. Uses inline fake `INode`/`IRelationship` implementations.
 
-Both projects run without any external dependency.
+**`OnixLabs.ElementFramework.AGE.UnitTests`** — xUnit tests against the AGE provider's pure functions. Cover:
+
+- `CypherIdentifier.Escape` — same coverage as the Neo4j provider, mirroring the duplicated code path.
+- `AgePropertySerializer.Serialize` — `Guid` → string, `DateTimeOffset` / `DateTime` → ISO-8601 round-trip, enum → name, primitives passthrough, null passthrough.
+- `AgeParameterBinder` — `$`-prefixed token on first use, collision resolution with `_N` suffix, deterministic ordering, blank-name rejection, `ToParameters` snapshot.
+- `AgtypeWriter` — empty dict → `{}`, string / boolean / null / every integer-family primitive / double / decimal / insertion-order preservation, throws for CLR types that should have been pre-flattened by `AgePropertySerializer`.
+- `AgtypeReader` — scalar string / integer / fractional / boolean / null parsing, vertex and edge entity parsing (label + properties), empty-properties handling, throws for malformed JSON / missing kind tag / unsupported kind / nested-object property. The integer test explicitly asserts `long` (not `double`) to lock in the `(object)` cast that the conformance suite uncovered.
+- `AgeCypherEmitter` — every emit method, the `SELECT * FROM ag_catalog.cypher('graph', $$...$$, @p) AS (alias agtype)` wrapping, graph-name escaping (single-quote doubling), `cnt` alias for existence (the `count`-as-SQL-reserved-word workaround), `MERGE ... SET` without `ON CREATE SET / ON MATCH SET` (AGE 1.6.0 doesn't implement them), `@p` omission when no parameters are bound, ORDER BY / SKIP / LIMIT tail emission, every comparison and string-comparison operator, null predicate emission without binding values, AST-validation throws.
+- `AgeResultMaterializer` — agtype-vertex and agtype-edge parsing under the conventional `n` / `r` aliases plus explicit `MaterializeNodeAt` / `MaterializeEdgeAt`, every Convert path (Guid, DateTimeOffset, DateTime, enum, long→int, nullable Guid, bool/double primitives), default-on-missing properties, kind-mismatch throws (vertex under edge alias, edge under node alias), and `ReadExists` with positive / zero / negative / fractional / missing / non-string `cnt` values.
+
+All three unit-test projects run without any external dependency.
 
 ### 12.2 Conformance suite: `OnixLabs.ElementFramework.Conformance`
 
@@ -803,7 +815,7 @@ The in-memory and AGE projects each skip four conformance tests that assert on r
 
 ### 12.4 CI
 
-`.github/workflows/ci.yml` runs five test steps in sequence: build → abstraction unit tests → Neo4j-provider unit tests → in-memory conformance → Neo4j conformance → AGE conformance (the unit and in-memory passes fail fast on a regression before Docker is even started, shaving minutes off failed PRs). The publish step packs all five NuGet artefacts.
+`.github/workflows/ci.yml` runs six test steps in sequence: build → abstraction unit tests → Neo4j-provider unit tests → AGE-provider unit tests → in-memory conformance → Neo4j conformance → AGE conformance (the unit and in-memory passes fail fast on a regression before Docker is even started, shaving minutes off failed PRs). The publish step packs all five NuGet artefacts.
 
 ---
 

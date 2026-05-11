@@ -56,6 +56,13 @@ jobs:
           --no-build
           --verbosity normal
 
+      - name: Run Apache AGE provider unit tests
+        run: >
+          dotnet test OnixLabs.ElementFramework.AGE.UnitTests/OnixLabs.ElementFramework.AGE.UnitTests.csproj
+          --configuration Release
+          --no-build
+          --verbosity normal
+
       - name: Run in-memory conformance tests
         run: >
           dotnet test OnixLabs.ElementFramework.InMemory.IntegrationTests/OnixLabs.ElementFramework.InMemory.IntegrationTests.csproj

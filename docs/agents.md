@@ -19,7 +19,7 @@ The starting point for AI agents working in this repository. Read this first, th
 
 **Five production projects.** `Abstractions` (contracts only), `OnixLabs.ElementFramework` (default impl: change tracker, model, sets, traversal, DI), `OnixLabs.ElementFramework.Neo4j` (Cypher-over-Bolt provider), `OnixLabs.ElementFramework.AGE` (Cypher-over-Npgsql provider for Apache AGE on Postgres), `OnixLabs.ElementFramework.InMemory` (in-process provider for tests/demos).
 
-**Five test projects.** `UnitTests` (against the default impl), `Neo4j.UnitTests` (provider-pure functions), `Conformance` (a library of provider-agnostic integration tests, subclassed per provider), and `<Provider>.IntegrationTests` (one per provider, runs the conformance suite end-to-end).
+**Six test projects.** `UnitTests` (against the default impl), `Neo4j.UnitTests` and `AGE.UnitTests` (provider-pure functions), `Conformance` (a library of provider-agnostic integration tests, subclassed per provider), and `<Provider>.IntegrationTests` (one per provider, runs the conformance suite end-to-end).
 
 **Dependency direction is strictly inward.** Providers reference `OnixLabs.ElementFramework` (which transitively pulls `Abstractions`). Provider-to-provider references do not exist. Don't introduce them.
 
@@ -35,6 +35,7 @@ dotnet build onixlabs-dotnet-element-framework.slnx
 # Unit tests (fast, no external deps)
 dotnet test OnixLabs.ElementFramework.UnitTests/OnixLabs.ElementFramework.UnitTests.csproj --no-build
 dotnet test OnixLabs.ElementFramework.Neo4j.UnitTests/OnixLabs.ElementFramework.Neo4j.UnitTests.csproj --no-build
+dotnet test OnixLabs.ElementFramework.AGE.UnitTests/OnixLabs.ElementFramework.AGE.UnitTests.csproj --no-build
 
 # In-memory conformance (fast, no external deps)
 dotnet test OnixLabs.ElementFramework.InMemory.IntegrationTests/OnixLabs.ElementFramework.InMemory.IntegrationTests.csproj --no-build
