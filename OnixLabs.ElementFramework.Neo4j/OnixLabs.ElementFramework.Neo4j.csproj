@@ -4,6 +4,9 @@
         <RootNamespace>OnixLabs.ElementFramework</RootNamespace>
     </PropertyGroup>
     <ItemGroup>
+      <InternalsVisibleTo Include="OnixLabs.ElementFramework.Neo4j.UnitTests" />
+    </ItemGroup>
+    <ItemGroup>
       <ProjectReference Include="..\OnixLabs.ElementFramework\OnixLabs.ElementFramework.csproj" />
     </ItemGroup>
     <ItemGroup>

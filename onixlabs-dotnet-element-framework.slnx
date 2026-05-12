@@ -3,11 +3,21 @@
     <Project Path="OnixLabs.ElementFramework.Abstractions/OnixLabs.ElementFramework.Abstractions.csproj" />
   </Folder>
   <Folder Name="/Implementations/">
+    <Project Path="OnixLabs.ElementFramework.AGE/OnixLabs.ElementFramework.AGE.csproj" />
+    <Project Path="OnixLabs.ElementFramework.Arango/OnixLabs.ElementFramework.Arango.csproj" />
+    <Project Path="OnixLabs.ElementFramework.InMemory/OnixLabs.ElementFramework.InMemory.csproj" />
     <Project Path="OnixLabs.ElementFramework.Neo4j/OnixLabs.ElementFramework.Neo4j.csproj" />
     <Project Path="OnixLabs.ElementFramework/OnixLabs.ElementFramework.csproj" />
   </Folder>
   <Folder Name="/Tests/">
+    <Project Path="OnixLabs.ElementFramework.AGE.IntegrationTests/OnixLabs.ElementFramework.AGE.IntegrationTests.csproj" />
+    <Project Path="OnixLabs.ElementFramework.Arango.IntegrationTests/OnixLabs.ElementFramework.Arango.IntegrationTests.csproj" />
+    <Project Path="OnixLabs.ElementFramework.Conformance/OnixLabs.ElementFramework.Conformance.csproj" />
+    <Project Path="OnixLabs.ElementFramework.InMemory.IntegrationTests/OnixLabs.ElementFramework.InMemory.IntegrationTests.csproj" />
     <Project Path="OnixLabs.ElementFramework.Neo4j.IntegrationTests/OnixLabs.ElementFramework.Neo4j.IntegrationTests.csproj" />
+    <Project Path="OnixLabs.ElementFramework.AGE.UnitTests/OnixLabs.ElementFramework.AGE.UnitTests.csproj" />
+    <Project Path="OnixLabs.ElementFramework.Arango.UnitTests/OnixLabs.ElementFramework.Arango.UnitTests.csproj" />
+    <Project Path="OnixLabs.ElementFramework.Neo4j.UnitTests/OnixLabs.ElementFramework.Neo4j.UnitTests.csproj" />
     <Project Path="OnixLabs.ElementFramework.UnitTests/OnixLabs.ElementFramework.UnitTests.csproj" />
   </Folder>
 </Solution>

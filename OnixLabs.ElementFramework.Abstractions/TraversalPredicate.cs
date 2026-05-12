@@ -23,9 +23,12 @@
 namespace OnixLabs.ElementFramework;
 
 /// <summary>
-/// Represents a property-equality predicate accumulated from a Where clause on the fluent traversal builder.
+/// Represents the abstract base of a predicate tree accumulated from a Where clause on the fluent traversal builder.
 /// </summary>
-/// <param name="Alias">The alias of the bound variable to which the predicate applies.</param>
-/// <param name="ClrPropertyName">The name of the CLR property being compared.</param>
-/// <param name="Value">The constant value against which the property is compared.</param>
-public sealed record TraversalPredicate(string Alias, string ClrPropertyName, object? Value);
+/// <remarks>
+/// Concrete subtypes are <see cref="PropertyComparisonPredicate"/>, <see cref="StringComparisonPredicate"/>,
+/// <see cref="NullPredicate"/>, <see cref="AndPredicate"/>, <see cref="OrPredicate"/>, and <see cref="NotPredicate"/>.
+/// Provider authors translate the tree recursively in their <see cref="IStatementEmitter"/> and
+/// <see cref="ITraversalTranslator"/> implementations.
+/// </remarks>
+public abstract record TraversalPredicate;

@@ -28,6 +28,18 @@ namespace OnixLabs.ElementFramework;
 public interface IGraphModel
 {
     /// <summary>
+    /// Gets the metadata for every registered node type in the model.
+    /// </summary>
+    /// <value>The collection of <see cref="INodeMetadata"/> for every registered node type, in registration order.</value>
+    IReadOnlyList<INodeMetadata> Nodes { get; }
+
+    /// <summary>
+    /// Gets the metadata for every registered relationship in the model.
+    /// </summary>
+    /// <value>The collection of <see cref="IRelationshipMetadata"/> for every registered relationship, in registration order.</value>
+    IReadOnlyList<IRelationshipMetadata> Relationships { get; }
+
+    /// <summary>
     /// Gets the metadata for the registered node type identified by <paramref name="nodeType"/>.
     /// </summary>
     /// <param name="nodeType">The CLR type of the node to look up.</param>

@@ -37,19 +37,50 @@ namespace OnixLabs.ElementFramework;
 internal sealed class Neo4jResultMaterializer : IResultMaterializer
 {
     /// <summary>
+    /// The alias the Cypher emitter uses to project node entities in typed reads.
+    /// </summary>
+    internal const string NodeAlias = "n";
+
+    /// <summary>
+    /// The alias the Cypher emitter uses to project edge entities in typed reads.
+    /// </summary>
+    internal const string EdgeAlias = "r";
+
+    /// <summary>
+    /// The alias the Cypher emitter uses to project the existence count.
+    /// </summary>
+    internal const string CountAlias = "count";
+
+    /// <summary>
     /// Cache of compiled parameterless-constructor delegates keyed by CLR type, used by <see cref="Materialize{T}"/>.
     /// </summary>
     private readonly ConcurrentDictionary<Type, Func<object>> instantiators = new();
 
     /// <inheritdoc/>
-    public T MaterializeNode<T>(IGraphModel model, IReadOnlyDictionary<string, object?> row, string alias) => row[alias] is INode node
+    public T MaterializeNode<T>(IGraphModel model, IReadOnlyDictionary<string, object?> row) =>
+        MaterializeNodeAt<T>(model, row, NodeAlias);
+
+    /// <inheritdoc/>
+    public T MaterializeEdge<T>(IGraphModel model, IReadOnlyDictionary<string, object?> row) =>
+        MaterializeEdgeAt<T>(model, row, EdgeAlias);
+
+    /// <inheritdoc/>
+    public T MaterializeNodeAt<T>(IGraphModel model, IReadOnlyDictionary<string, object?> row, string alias) => row[alias] is INode node
         ? Materialize<T>(model.GetNode(typeof(T)).Properties, node.Properties)
         : throw new ResultMaterializationException($"Expected an INode at row alias '{alias}', got {row[alias]?.GetType().FullName ?? "null"}.");
 
     /// <inheritdoc/>
-    public T MaterializeEdge<T>(IGraphModel model, IReadOnlyDictionary<string, object?> row, string alias) => row[alias] is IRelationship relationship
+    public T MaterializeEdgeAt<T>(IGraphModel model, IReadOnlyDictionary<string, object?> row, string alias) => row[alias] is IRelationship relationship
         ? Materialize<T>(model.GetRelationship(typeof(T)).Properties, relationship.Properties)
         : throw new ResultMaterializationException($"Expected an IRelationship at row alias '{alias}', got {row[alias]?.GetType().FullName ?? "null"}.");
+
+    /// <inheritdoc/>
+    public bool ReadExists(IReadOnlyDictionary<string, object?> row)
+    {
+        if (!row.TryGetValue(CountAlias, out object? value))
+            throw new ResultMaterializationException($"Existence row does not contain the expected '{CountAlias}' alias.");
+        return value is long count && count > 0;
+    }
 
     /// <summary>
     /// Constructs a CLR instance of <typeparamref name="T"/> and assigns each mapped property from <paramref name="source"/>.

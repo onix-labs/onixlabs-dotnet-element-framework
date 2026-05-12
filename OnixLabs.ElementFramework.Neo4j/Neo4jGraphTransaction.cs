@@ -20,6 +20,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
+using Microsoft.Extensions.Logging;
 using Neo4j.Driver;
 
 namespace OnixLabs.ElementFramework;
@@ -48,6 +49,11 @@ internal sealed class Neo4jGraphTransaction : IGraphTransaction
     private readonly Neo4jGraphTransactionOpener opener;
 
     /// <summary>
+    /// The logger this transaction writes diagnostic events to.
+    /// </summary>
+    private readonly ILogger<Neo4jGraphTransaction> logger;
+
+    /// <summary>
     /// Indicates whether the transaction has been committed, rolled back, or disposed.
     /// </summary>
     private bool closed;
@@ -58,11 +64,13 @@ internal sealed class Neo4jGraphTransaction : IGraphTransaction
     /// <param name="session">The Neo4j async session that the opener obtained from <see cref="IDriver.AsyncSession()"/>.</param>
     /// <param name="transaction">The async transaction begun on <paramref name="session"/>.</param>
     /// <param name="opener">The opener that produced this transaction; receives the ambient-clear callback on terminal.</param>
-    internal Neo4jGraphTransaction(IAsyncSession session, IAsyncTransaction transaction, Neo4jGraphTransactionOpener opener)
+    /// <param name="logger">The typed logger this transaction writes diagnostic events to. Pass <see cref="Microsoft.Extensions.Logging.Abstractions.NullLogger{T}.Instance"/> to disable logging.</param>
+    internal Neo4jGraphTransaction(IAsyncSession session, IAsyncTransaction transaction, Neo4jGraphTransactionOpener opener, ILogger<Neo4jGraphTransaction> logger)
     {
         this.session = session;
         this.transaction = transaction;
         this.opener = opener;
+        this.logger = logger;
     }
 
     /// <summary>
@@ -82,9 +90,11 @@ internal sealed class Neo4jGraphTransaction : IGraphTransaction
         try
         {
             await transaction.CommitAsync().ConfigureAwait(false);
+            logger.LogInformation("Neo4j graph transaction committed.");
         }
         catch (Exception exception)
         {
+            logger.LogWarning(exception, "Failed to commit Neo4j graph transaction.");
             throw new GraphTransactionException("Failed to commit the active graph transaction against the Neo4j endpoint.", exception);
         }
         finally
@@ -104,9 +114,11 @@ internal sealed class Neo4jGraphTransaction : IGraphTransaction
         try
         {
             await transaction.RollbackAsync().ConfigureAwait(false);
+            logger.LogInformation("Neo4j graph transaction rolled back.");
         }
         catch (Exception exception)
         {
+            logger.LogWarning(exception, "Failed to roll back Neo4j graph transaction.");
             throw new GraphTransactionException("Failed to roll back the active graph transaction against the Neo4j endpoint.", exception);
         }
         finally
@@ -126,10 +138,12 @@ internal sealed class Neo4jGraphTransaction : IGraphTransaction
         try
         {
             await transaction.RollbackAsync().ConfigureAwait(false);
+            logger.LogInformation("Neo4j graph transaction disposed without explicit commit/rollback; best-effort rollback succeeded.");
         }
-        catch
+        catch (Exception exception)
         {
             // Best-effort rollback during dispose; the underlying session disposal still runs below.
+            logger.LogWarning(exception, "Best-effort rollback during Neo4j transaction dispose failed.");
         }
 
         await CloseAsync().ConfigureAwait(false);
@@ -148,9 +162,10 @@ internal sealed class Neo4jGraphTransaction : IGraphTransaction
         {
             await session.CloseAsync().ConfigureAwait(false);
         }
-        catch
+        catch (Exception exception)
         {
             // Best-effort session close; the ambient slot must still be cleared below so the opener accepts a new Open call.
+            logger.LogWarning(exception, "Failed to close Neo4j session during transaction terminal; ambient slot will still be cleared.");
         }
 
         opener.ClearActive();

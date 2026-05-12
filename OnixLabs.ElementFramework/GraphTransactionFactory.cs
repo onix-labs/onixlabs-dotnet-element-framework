@@ -20,6 +20,8 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
+using System.Diagnostics;
+
 namespace OnixLabs.ElementFramework;
 
 /// <summary>
@@ -38,14 +40,36 @@ internal sealed class GraphTransactionFactory(IGraphTransactionOpener opener, IC
     /// <inheritdoc/>
     public IGraphTransaction Open()
     {
-        IGraphTransaction transaction = opener.Open();
-        return new RollbackAwareGraphTransaction(transaction, tracker);
+        using Activity? activity = ElementFrameworkDiagnostics.Source.StartActivity("ElementFramework.BeginTransaction", ActivityKind.Internal);
+        try
+        {
+            IGraphTransaction transaction = opener.Open();
+            activity?.SetStatus(ActivityStatusCode.Ok);
+            return new RollbackAwareGraphTransaction(transaction, tracker);
+        }
+        catch (Exception exception)
+        {
+            activity?.SetStatus(ActivityStatusCode.Error, exception.Message);
+            activity?.SetTag("exception.type", exception.GetType().FullName);
+            throw;
+        }
     }
 
     /// <inheritdoc/>
     public async Task<IGraphTransaction> OpenAsync(CancellationToken token = default)
     {
-        IGraphTransaction transaction = await opener.OpenAsync(token).ConfigureAwait(false);
-        return new RollbackAwareGraphTransaction(transaction, tracker);
+        using Activity? activity = ElementFrameworkDiagnostics.Source.StartActivity("ElementFramework.BeginTransaction", ActivityKind.Internal);
+        try
+        {
+            IGraphTransaction transaction = await opener.OpenAsync(token).ConfigureAwait(false);
+            activity?.SetStatus(ActivityStatusCode.Ok);
+            return new RollbackAwareGraphTransaction(transaction, tracker);
+        }
+        catch (Exception exception)
+        {
+            activity?.SetStatus(ActivityStatusCode.Error, exception.Message);
+            activity?.SetTag("exception.type", exception.GetType().FullName);
+            throw;
+        }
     }
 }

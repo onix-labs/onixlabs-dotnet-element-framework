@@ -21,6 +21,7 @@
 // SOFTWARE.
 
 using System.Collections.Concurrent;
+using Microsoft.Extensions.Logging;
 using Neo4j.Driver;
 
 namespace OnixLabs.ElementFramework;
@@ -29,7 +30,12 @@ namespace OnixLabs.ElementFramework;
 /// Represents a process-wide cache of <see cref="IDriver"/> instances keyed by connection string and auth token.
 /// </summary>
 /// <remarks>
-/// Neo4j drivers are designed for application-singleton reuse — they manage their own connection pool internally and creating one per call leaks pooled connections. Tests that spin up many Testcontainer instances are the practical motivation: each container has a unique connection string so the cache grows one entry per container, and drivers are reused across the many <c>AddGraphContext</c> calls within a single fixture. Auth-token equality is reference-based because <see cref="IAuthToken"/> does not override equality; if two callers construct equivalent auth tokens via separate <c>AuthTokens.Basic(...)</c> calls and pass them into <c>UseNeo4j</c>, two drivers will be created.
+/// Neo4j drivers are designed for application-singleton reuse — they manage their own connection pool internally and creating one per
+/// call leaks pooled connections. Tests that spin up many Testcontainer instances are the practical motivation: each container has a
+/// unique connection string, so the cache grows one entry per container, and drivers are reused across the many <c>AddGraphContext</c>
+/// calls within a single fixture. Auth-token equality is reference-based because <see cref="IAuthToken"/> does not override equality;
+/// if two callers construct equivalent auth tokens via separate <c>AuthTokens.Basic(...)</c> calls and pass them into <c>UseNeo4j</c>,
+/// two drivers will be created.
 /// </remarks>
 internal static class Neo4jDriverCache
 {
@@ -43,10 +49,15 @@ internal static class Neo4jDriverCache
     /// </summary>
     /// <param name="connectionString">The Bolt connection URI (e.g. <c>bolt://localhost:7687</c> or <c>neo4j://...</c>).</param>
     /// <param name="authToken">The auth token to bind the driver with, or <see langword="null"/> for unauthenticated.</param>
+    /// <param name="logger">The logger used to record first-time driver creation. Pass <see cref="Microsoft.Extensions.Logging.Abstractions.NullLogger.Instance"/> to disable logging. <see cref="Neo4jDriverCache"/> is a static class so an untyped <see cref="ILogger"/> is used rather than a typed one.</param>
     /// <returns>Returns the shared <see cref="IDriver"/> instance for the supplied key.</returns>
-    public static IDriver GetOrCreate(string connectionString, IAuthToken? authToken) => Drivers.GetOrAdd(
-        new DriverKey(connectionString, authToken),
-        static key => GraphDatabase.Driver(key.ConnectionString, key.AuthToken ?? AuthTokens.None)
+    public static IDriver GetOrCreate(string connectionString, IAuthToken? authToken, ILogger logger) => Drivers.GetOrAdd(
+        new DriverKey(connectionString, authToken), static (key, logger) =>
+        {
+            logger.LogInformation("Creating Neo4j driver for endpoint {ConnectionString}.", key.ConnectionString);
+            return GraphDatabase.Driver(key.ConnectionString, key.AuthToken ?? AuthTokens.None);
+        },
+        logger
     );
 
     /// <summary>

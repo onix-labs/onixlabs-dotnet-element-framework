@@ -12,5 +12,6 @@
     </ItemGroup>
     <ItemGroup>
         <ProjectReference Include="..\OnixLabs.ElementFramework.Neo4j\OnixLabs.ElementFramework.Neo4j.csproj"/>
+        <ProjectReference Include="..\OnixLabs.ElementFramework.Conformance\OnixLabs.ElementFramework.Conformance.csproj"/>
     </ItemGroup>
 </Project>

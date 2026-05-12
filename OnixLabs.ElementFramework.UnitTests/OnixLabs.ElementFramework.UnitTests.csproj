@@ -8,8 +8,10 @@
     </ItemGroup>
     <ItemGroup>
         <Using Include="Xunit"/>
+        <Using Include="OnixLabs.ElementFramework.Conformance.TestFixtures.BlogApplication"/>
     </ItemGroup>
     <ItemGroup>
         <ProjectReference Include="..\OnixLabs.ElementFramework\OnixLabs.ElementFramework.csproj"/>
+        <ProjectReference Include="..\OnixLabs.ElementFramework.Conformance\OnixLabs.ElementFramework.Conformance.csproj"/>
     </ItemGroup>
 </Project>

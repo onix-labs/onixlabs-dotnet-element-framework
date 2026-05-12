@@ -192,9 +192,11 @@ public class GraphTraversalTests
 
         TraversalAst ast = translator.LastAst!;
         TraversalPredicate predicate = Assert.Single(ast.Predicates);
-        Assert.Equal("a", predicate.Alias);
-        Assert.Equal(nameof(Author.Name), predicate.ClrPropertyName);
-        Assert.Equal("Alice", predicate.Value);
+        PropertyComparisonPredicate comparison = Assert.IsType<PropertyComparisonPredicate>(predicate);
+        Assert.Equal("a", comparison.Alias);
+        Assert.Equal(nameof(Author.Name), comparison.ClrPropertyName);
+        Assert.Equal(ComparisonOperator.Equal, comparison.Operator);
+        Assert.Equal("Alice", comparison.Value);
     }
 
     [Fact(DisplayName = "Where chains accumulate multiple predicates in order")]
@@ -210,8 +212,8 @@ public class GraphTraversalTests
 
         TraversalAst ast = translator.LastAst!;
         Assert.Equal(2, ast.Predicates.Count);
-        Assert.Equal(nameof(Author.Name), ast.Predicates[0].ClrPropertyName);
-        Assert.Equal(nameof(Author.Id), ast.Predicates[1].ClrPropertyName);
+        Assert.Equal(nameof(Author.Name), Assert.IsType<PropertyComparisonPredicate>(ast.Predicates[0]).ClrPropertyName);
+        Assert.Equal(nameof(Author.Id), Assert.IsType<PropertyComparisonPredicate>(ast.Predicates[1]).ClrPropertyName);
     }
 
     [Fact(DisplayName = "Node throws ArgumentException when the alias is null or whitespace")]
@@ -243,7 +245,7 @@ public class GraphTraversalTests
     public void ReturnForwardsTranslatorRows()
     {
         GraphTraversal traversal = NewTraversal();
-        Author alice = new() { Id = Guid.NewGuid(), Name = "Alice" };
+        Author alice = Author.Create("Alice");
         translator.OnTranslate = _ => [alice];
 
         IEnumerable<Author> rows = traversal.Match().Node<Author>("a").Return<Author>("a");
@@ -255,7 +257,7 @@ public class GraphTraversalTests
     public async Task ReturnAsyncForwardsTranslatorRows()
     {
         GraphTraversal traversal = NewTraversal();
-        Author alice = new() { Id = Guid.NewGuid(), Name = "Alice" };
+        Author alice = Author.Create("Alice");
         translator.OnTranslate = _ => [alice];
 
         List<Author> collected = [];
@@ -263,6 +265,163 @@ public class GraphTraversalTests
             collected.Add(author);
 
         Assert.Same(alice, Assert.Single(collected));
+    }
+
+    [Fact(DisplayName = "OrderBy records an ascending TraversalOrdering scoped to the bound alias")]
+    public void OrderByRecordsAscendingOrdering()
+    {
+        GraphTraversal traversal = NewTraversal();
+
+        traversal.Match().Node<Author>("a").OrderBy(a => a.Name).Return<Author>("a");
+
+        TraversalOrdering ordering = Assert.Single(translator.LastAst!.Orderings);
+        Assert.Equal("a", ordering.Alias);
+        Assert.Equal(nameof(Author.Name), ordering.ClrPropertyName);
+        Assert.Equal(OrderDirection.Ascending, ordering.Direction);
+    }
+
+    [Fact(DisplayName = "OrderByDescending records a descending TraversalOrdering")]
+    public void OrderByDescendingRecordsDescendingOrdering()
+    {
+        GraphTraversal traversal = NewTraversal();
+
+        traversal.Match().Node<Author>("a").OrderByDescending(a => a.Name).Return<Author>("a");
+
+        Assert.Equal(OrderDirection.Descending, Assert.Single(translator.LastAst!.Orderings).Direction);
+    }
+
+    [Fact(DisplayName = "OrderBy unwraps a Convert wrapper around a value-type property access")]
+    public void OrderByUnwrapsConvertForValueType()
+    {
+        GraphTraversal traversal = NewTraversal();
+
+        // Selecting Guid via object boxes the access through a Convert node.
+        traversal.Match().Node<Author>("a").OrderBy<object>(a => a.Id).Return<Author>("a");
+
+        Assert.Equal(nameof(Author.Id), Assert.Single(translator.LastAst!.Orderings).ClrPropertyName);
+    }
+
+    [Fact(DisplayName = "OrderBy throws InvalidOperationException when an ordering is already applied")]
+    public void OrderByThrowsOnDuplicate()
+    {
+        GraphTraversal traversal = NewTraversal();
+        IPatternNode<Author> node = traversal.Match().Node<Author>("a").OrderBy(a => a.Name);
+
+        Assert.Throws<InvalidOperationException>(() => node.OrderBy(a => a.Name));
+    }
+
+    [Fact(DisplayName = "OrderBy and OrderByDescending are mutually exclusive on the same traversal")]
+    public void OrderByDescendingThrowsAfterOrderBy()
+    {
+        GraphTraversal traversal = NewTraversal();
+        IPatternNode<Author> node = traversal.Match().Node<Author>("a").OrderBy(a => a.Name);
+
+        Assert.Throws<InvalidOperationException>(() => node.OrderByDescending(a => a.Name));
+    }
+
+    [Fact(DisplayName = "OrderBy throws ArgumentNullException when the selector is null")]
+    public void OrderByThrowsForNullSelector()
+    {
+        GraphTraversal traversal = NewTraversal();
+        IPatternNode<Author> node = traversal.Match().Node<Author>("a");
+
+        Assert.Throws<ArgumentNullException>(() => node.OrderBy<string>(null!));
+    }
+
+    [Fact(DisplayName = "OrderBy throws NotSupportedException when the selector is not a single property access")]
+    public void OrderByThrowsForCompoundSelector()
+    {
+        GraphTraversal traversal = NewTraversal();
+        IPatternNode<Author> node = traversal.Match().Node<Author>("a");
+
+        Assert.Throws<NotSupportedException>(() => node.OrderBy(a => a.Name.Length));
+    }
+
+    [Fact(DisplayName = "Skip records the supplied row count on the AST")]
+    public void SkipRecordsCountOnAst()
+    {
+        GraphTraversal traversal = NewTraversal();
+
+        traversal.Match().Node<Author>("a").Skip(10).Return<Author>("a");
+
+        Assert.Equal(10, translator.LastAst!.Skip);
+    }
+
+    [Fact(DisplayName = "Take records the supplied row count on the AST")]
+    public void TakeRecordsCountOnAst()
+    {
+        GraphTraversal traversal = NewTraversal();
+
+        traversal.Match().Node<Author>("a").Take(25).Return<Author>("a");
+
+        Assert.Equal(25, translator.LastAst!.Take);
+    }
+
+    [Fact(DisplayName = "Skip throws ArgumentOutOfRangeException when count is negative")]
+    public void SkipThrowsForNegativeCount()
+    {
+        GraphTraversal traversal = NewTraversal();
+        IPatternNode<Author> node = traversal.Match().Node<Author>("a");
+
+        Assert.Throws<ArgumentOutOfRangeException>(() => node.Skip(-1));
+    }
+
+    [Fact(DisplayName = "Take throws ArgumentOutOfRangeException when count is negative")]
+    public void TakeThrowsForNegativeCount()
+    {
+        GraphTraversal traversal = NewTraversal();
+        IPatternNode<Author> node = traversal.Match().Node<Author>("a");
+
+        Assert.Throws<ArgumentOutOfRangeException>(() => node.Take(-1));
+    }
+
+    [Fact(DisplayName = "Skip throws InvalidOperationException when already applied")]
+    public void SkipThrowsOnDuplicate()
+    {
+        GraphTraversal traversal = NewTraversal();
+        IPatternNode<Author> node = traversal.Match().Node<Author>("a").Skip(1);
+
+        Assert.Throws<InvalidOperationException>(() => node.Skip(2));
+    }
+
+    [Fact(DisplayName = "Take throws InvalidOperationException when already applied")]
+    public void TakeThrowsOnDuplicate()
+    {
+        GraphTraversal traversal = NewTraversal();
+        IPatternNode<Author> node = traversal.Match().Node<Author>("a").Take(1);
+
+        Assert.Throws<InvalidOperationException>(() => node.Take(2));
+    }
+
+    [Fact(DisplayName = "OrderBy / Skip / Take can chain together before Return")]
+    public void OrderingChainsWithSkipAndTake()
+    {
+        GraphTraversal traversal = NewTraversal();
+
+        traversal.Match()
+            .Node<Author>("a")
+            .OrderBy(a => a.Name)
+            .Skip(5)
+            .Take(10)
+            .Return<Author>("a");
+
+        TraversalAst ast = translator.LastAst!;
+        Assert.Single(ast.Orderings);
+        Assert.Equal(5, ast.Skip);
+        Assert.Equal(10, ast.Take);
+    }
+
+    [Fact(DisplayName = "AST defaults Orderings to empty, Skip to null, Take to null when none are applied")]
+    public void TailClausesDefaultToEmptyWhenAbsent()
+    {
+        GraphTraversal traversal = NewTraversal();
+
+        traversal.Match().Node<Author>("a").Return<Author>("a");
+
+        TraversalAst ast = translator.LastAst!;
+        Assert.Empty(ast.Orderings);
+        Assert.Null(ast.Skip);
+        Assert.Null(ast.Take);
     }
 
     [Fact(DisplayName = "Each Match/Merge/Create call allocates an independent traversal state")]

@@ -20,6 +20,9 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
+using System.Diagnostics;
+using Microsoft.Extensions.Logging;
+
 namespace OnixLabs.ElementFramework;
 
 /// <summary>
@@ -28,16 +31,45 @@ namespace OnixLabs.ElementFramework;
 /// <remarks>
 /// Flush is atomic. When no consumer-owned ambient transaction is active, an ambient transaction is auto-opened for the flush duration, every staged operation runs through it, and the transaction is committed on full success or rolled back on the first failure. When a consumer-owned ambient transaction is already active, operations execute within that transaction and lifecycle remains the consumer's responsibility. Pending operations are cleared only on success; on failure the original snapshot is preserved so a corrected retry can replay the full batch.
 /// </remarks>
-/// <param name="model">The frozen <see cref="IGraphModel"/> for the owning context's CLR type.</param>
-/// <param name="emitter">The provider's <see cref="IStatementEmitter"/>.</param>
-/// <param name="executor">The provider's <see cref="IRawStatementExecutor"/>.</param>
-/// <param name="opener">The provider's <see cref="IGraphTransactionOpener"/> used to detect or auto-open the ambient transaction that wraps a flush atomically.</param>
-internal sealed class ChangeTracker(
-    IGraphModel model,
-    IStatementEmitter emitter,
-    IRawStatementExecutor executor,
-    IGraphTransactionOpener opener) : IChangeTracker
+internal sealed class ChangeTracker : IChangeTracker
 {
+    /// <summary>The frozen graph model for the owning context's CLR type.</summary>
+    private readonly IGraphModel model;
+
+    /// <summary>The provider's statement emitter.</summary>
+    private readonly IStatementEmitter emitter;
+
+    /// <summary>The provider's raw statement executor.</summary>
+    private readonly IRawStatementExecutor executor;
+
+    /// <summary>The provider's transaction opener used to detect or auto-open the ambient transaction that wraps a flush.</summary>
+    private readonly IGraphTransactionOpener opener;
+
+    /// <summary>The logger this tracker writes diagnostic events to.</summary>
+    private readonly ILogger<ChangeTracker> logger;
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="ChangeTracker"/> class.
+    /// </summary>
+    /// <param name="model">The frozen <see cref="IGraphModel"/> for the owning context's CLR type.</param>
+    /// <param name="emitter">The provider's <see cref="IStatementEmitter"/>.</param>
+    /// <param name="executor">The provider's <see cref="IRawStatementExecutor"/>.</param>
+    /// <param name="opener">The provider's <see cref="IGraphTransactionOpener"/> used to detect or auto-open the ambient transaction that wraps a flush atomically.</param>
+    /// <param name="logger">The typed logger this tracker writes diagnostic events to. Pass <see cref="Microsoft.Extensions.Logging.Abstractions.NullLogger{T}.Instance"/> to disable logging.</param>
+    internal ChangeTracker(
+        IGraphModel model,
+        IStatementEmitter emitter,
+        IRawStatementExecutor executor,
+        IGraphTransactionOpener opener,
+        ILogger<ChangeTracker> logger)
+    {
+        this.model = model;
+        this.emitter = emitter;
+        this.executor = executor;
+        this.opener = opener;
+        this.logger = logger;
+    }
+
     /// <summary>
     /// The identity map of tracked instances keyed by CLR type and key value.
     /// </summary>
@@ -51,77 +83,148 @@ internal sealed class ChangeTracker(
     /// <inheritdoc/>
     public int Flush()
     {
-        if (pending.Count == 0) return 0;
+        if (pending.Count == 0)
+        {
+            ElementFrameworkDiagnostics.FlushesCounter.Add(1, new KeyValuePair<string, object?>("outcome", "noop"));
+            return 0;
+        }
 
         List<Func<IStatementEmitter, IGraphModel, DataStatement>> snapshot = [.. pending];
+        bool ambient = opener.Active is not null;
+        string mode = ambient ? "ambient" : "auto";
 
-        if (opener.Active is not null)
-        {
-            int activeCount = ExecuteAll(snapshot);
-            pending.Clear();
-            return activeCount;
-        }
+        using Activity? activity = ElementFrameworkDiagnostics.Source.StartActivity("ElementFramework.SaveChanges", ActivityKind.Internal);
+        activity?.SetTag("elementframework.operation.count", snapshot.Count);
+        activity?.SetTag("elementframework.transaction.mode", mode);
+        logger.LogDebug("Flushing {OperationCount} pending operation(s).", snapshot.Count);
 
-        IGraphTransaction transaction = opener.Open();
         try
         {
-            int count;
-            try
+            if (ambient)
             {
-                count = ExecuteAll(snapshot);
-            }
-            catch
-            {
-                transaction.Rollback();
-                throw;
+                int activeCount = ExecuteAll(snapshot);
+                pending.Clear();
+                logger.LogDebug("Flushed {OperationCount} operation(s) within an ambient transaction.", activeCount);
+                RecordFlushSuccess(activity, mode, activeCount);
+                return activeCount;
             }
 
-            transaction.Commit();
-            pending.Clear();
-            return count;
+            IGraphTransaction transaction = opener.Open();
+            try
+            {
+                int count;
+                try
+                {
+                    count = ExecuteAll(snapshot);
+                }
+                catch (Exception exception)
+                {
+                    logger.LogWarning(exception, "Flush failed; rolling back auto-opened transaction. {OperationCount} operation(s) remain pending for retry.", snapshot.Count);
+                    transaction.Rollback();
+                    throw;
+                }
+
+                transaction.Commit();
+                pending.Clear();
+                logger.LogDebug("Flushed {OperationCount} operation(s) under auto-opened transaction.", count);
+                RecordFlushSuccess(activity, mode, count);
+                return count;
+            }
+            finally
+            {
+                transaction.Dispose();
+            }
         }
-        finally
+        catch (Exception exception)
         {
-            transaction.Dispose();
+            RecordFlushFailure(activity, mode, exception);
+            throw;
         }
     }
 
     /// <inheritdoc/>
     public async Task<int> FlushAsync(CancellationToken token = default)
     {
-        if (pending.Count == 0) return 0;
+        if (pending.Count == 0)
+        {
+            ElementFrameworkDiagnostics.FlushesCounter.Add(1, new KeyValuePair<string, object?>("outcome", "noop"));
+            return 0;
+        }
 
         List<Func<IStatementEmitter, IGraphModel, DataStatement>> snapshot = [.. pending];
+        bool ambient = opener.Active is not null;
+        string mode = ambient ? "ambient" : "auto";
 
-        if (opener.Active is not null)
-        {
-            int activeCount = await ExecuteAllAsync(snapshot, token).ConfigureAwait(false);
-            pending.Clear();
-            return activeCount;
-        }
+        using Activity? activity = ElementFrameworkDiagnostics.Source.StartActivity("ElementFramework.SaveChanges", ActivityKind.Internal);
+        activity?.SetTag("elementframework.operation.count", snapshot.Count);
+        activity?.SetTag("elementframework.transaction.mode", mode);
+        logger.LogDebug("Flushing {OperationCount} pending operation(s) (async).", snapshot.Count);
 
-        IGraphTransaction transaction = await opener.OpenAsync(token).ConfigureAwait(false);
         try
         {
-            int count;
-            try
+            if (ambient)
             {
-                count = await ExecuteAllAsync(snapshot, token).ConfigureAwait(false);
-            }
-            catch
-            {
-                await transaction.RollbackAsync(token).ConfigureAwait(false);
-                throw;
+                int activeCount = await ExecuteAllAsync(snapshot, token).ConfigureAwait(false);
+                pending.Clear();
+                logger.LogDebug("Flushed {OperationCount} operation(s) within an ambient transaction (async).", activeCount);
+                RecordFlushSuccess(activity, mode, activeCount);
+                return activeCount;
             }
 
-            await transaction.CommitAsync(token).ConfigureAwait(false);
-            pending.Clear();
-            return count;
+            IGraphTransaction transaction = await opener.OpenAsync(token).ConfigureAwait(false);
+            try
+            {
+                int count;
+                try
+                {
+                    count = await ExecuteAllAsync(snapshot, token).ConfigureAwait(false);
+                }
+                catch (Exception exception)
+                {
+                    logger.LogWarning(exception, "Flush failed (async); rolling back auto-opened transaction. {OperationCount} operation(s) remain pending for retry.", snapshot.Count);
+                    await transaction.RollbackAsync(token).ConfigureAwait(false);
+                    throw;
+                }
+
+                await transaction.CommitAsync(token).ConfigureAwait(false);
+                pending.Clear();
+                logger.LogDebug("Flushed {OperationCount} operation(s) under auto-opened transaction (async).", count);
+                RecordFlushSuccess(activity, mode, count);
+                return count;
+            }
+            finally
+            {
+                await transaction.DisposeAsync().ConfigureAwait(false);
+            }
         }
-        finally
+        catch (Exception exception)
         {
-            await transaction.DisposeAsync().ConfigureAwait(false);
+            RecordFlushFailure(activity, mode, exception);
+            throw;
         }
+    }
+
+    /// <summary>
+    /// Records a successful flush on the supplied <paramref name="activity"/> and ticks the success counters with the routing-mode tag.
+    /// </summary>
+    private static void RecordFlushSuccess(Activity? activity, string mode, int operationCount)
+    {
+        activity?.SetStatus(ActivityStatusCode.Ok);
+        KeyValuePair<string, object?> modeTag = new("elementframework.transaction.mode", mode);
+        ElementFrameworkDiagnostics.FlushesCounter.Add(1, new KeyValuePair<string, object?>("outcome", "success"), modeTag);
+        ElementFrameworkDiagnostics.FlushOperationsCounter.Add(operationCount, modeTag);
+    }
+
+    /// <summary>
+    /// Records a failed flush on the supplied <paramref name="activity"/> with status + exception type tag, and ticks the failure counter.
+    /// </summary>
+    private static void RecordFlushFailure(Activity? activity, string mode, Exception exception)
+    {
+        activity?.SetStatus(ActivityStatusCode.Error, exception.Message);
+        activity?.SetTag("exception.type", exception.GetType().FullName);
+        ElementFrameworkDiagnostics.FlushesCounter.Add(1,
+            new KeyValuePair<string, object?>("outcome", "failure"),
+            new KeyValuePair<string, object?>("elementframework.transaction.mode", mode));
     }
 
     /// <inheritdoc/>

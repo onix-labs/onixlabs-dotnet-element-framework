@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <IsPackable>true</IsPackable>
+        <RootNamespace>OnixLabs.ElementFramework</RootNamespace>
+    </PropertyGroup>
+    <ItemGroup>
+      <InternalsVisibleTo Include="OnixLabs.ElementFramework.AGE.UnitTests" />
+      <InternalsVisibleTo Include="OnixLabs.ElementFramework.AGE.IntegrationTests" />
+    </ItemGroup>
+    <ItemGroup>
+      <ProjectReference Include="..\OnixLabs.ElementFramework\OnixLabs.ElementFramework.csproj" />
+    </ItemGroup>
+    <ItemGroup>
+      <PackageReference Include="Npgsql" Version="9.0.4" />
+    </ItemGroup>
+</Project>

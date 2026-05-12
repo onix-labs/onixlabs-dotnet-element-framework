@@ -22,6 +22,7 @@
 
 namespace OnixLabs.ElementFramework.UnitTests;
 
+[Collection("Diagnostics-sensitive")]
 public class RollbackAwareGraphTransactionTests
 {
     [Fact(DisplayName = "Commit delegates to the inner transaction and does not reset the tracker")]

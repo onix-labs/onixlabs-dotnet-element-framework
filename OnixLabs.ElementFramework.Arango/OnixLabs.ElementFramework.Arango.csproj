@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <IsPackable>true</IsPackable>
+        <RootNamespace>OnixLabs.ElementFramework</RootNamespace>
+    </PropertyGroup>
+    <ItemGroup>
+      <InternalsVisibleTo Include="OnixLabs.ElementFramework.Arango.UnitTests" />
+      <InternalsVisibleTo Include="OnixLabs.ElementFramework.Arango.IntegrationTests" />
+    </ItemGroup>
+    <ItemGroup>
+      <ProjectReference Include="..\OnixLabs.ElementFramework\OnixLabs.ElementFramework.csproj" />
+    </ItemGroup>
+    <ItemGroup>
+      <PackageReference Include="ArangoDBNetStandard" Version="3.1.0" />
+    </ItemGroup>
+</Project>
