@@ -1,6 +1,6 @@
 # Agent Onboarding
 
-The starting point for AI agents working in this repository. Read this first, then dive into [architecture.md](architecture.md) for the deep tour. [production-readiness.md](production-readiness.md) lists known gaps and their priorities — consult it before suggesting "improvements" that are already on the list.
+The starting point for AI agents working in this repository. This file is the only documentation that lives in the repository — everything else (architecture, per-provider deep dives, the runnable example) lives in the project [wiki](https://github.com/onix-labs/onixlabs-dotnet-element-framework/wiki). Known gaps and future work live in the [issue tracker](https://github.com/onix-labs/onixlabs-dotnet-element-framework/issues) under the `tech-debt`, `roadmap`, and `production-readiness` labels — consult them before suggesting "improvements" that are already on the list.
 
 ## Contents
 
@@ -15,7 +15,7 @@ The starting point for AI agents working in this repository. Read this first, th
 
 ## 1. Orientation
 
-**What this is.** An Object-Graph Mapper (OGM) for .NET. Consumer code declares CLR types as nodes/edges, the framework owns an identity map and a queue of pending changes, and `SaveChanges` translates them into provider-native statements wrapped in a transaction. See [architecture.md §1–3](architecture.md#1-10000-foot-view) for the mental model.
+**What this is.** An Object-Graph Mapper (OGM) for .NET. Consumer code declares CLR types as nodes/edges, the framework owns an identity map and a queue of pending changes, and `SaveChanges` translates them into provider-native statements wrapped in a transaction.
 
 **Six production projects.** `Abstractions` (contracts only), `OnixLabs.ElementFramework` (default impl: change tracker, model, sets, traversal, DI), `OnixLabs.ElementFramework.Neo4j` (Cypher-over-Bolt provider), `OnixLabs.ElementFramework.AGE` (Cypher-over-Npgsql provider for Apache AGE on Postgres), `OnixLabs.ElementFramework.Arango` (AQL-over-HTTP provider for ArangoDB — the framework's first non-Cypher provider), `OnixLabs.ElementFramework.InMemory` (in-process provider for tests/demos).
 
@@ -294,16 +294,16 @@ public override string ToString() => name;
 
 ## 5. Common gotchas
 
-The architectural sharp edges that trip up first-time contributors. Most are explained in more depth in [architecture.md §16](architecture.md#16-known-constraints-and-non-goals) and [production-readiness.md](production-readiness.md).
+The architectural sharp edges that trip up first-time contributors. Background and rationale for the deeper architectural decisions live in the project [wiki](https://github.com/onix-labs/onixlabs-dotnet-element-framework/wiki).
 
 - **`ModelSource` caches by CLR type for the lifetime of the process.** `OnModelCreating` is invoked exactly once per `GraphContext` subclass. Don't put non-pure logic in it. Tests that hot-reload context types will surprise themselves.
 - **`ChangeTracker.TrackRemove` updates the identity map at track time, not flush time.** If a flush fails and rolls back, the identity map will report the node as gone while the database still has it. The pending queue is preserved on failure for retry; the identity map is not.
 - **`Pending` is cleared only on a successful flush.** A failed flush leaves the queue intact so a corrected retry can replay the batch. Don't write code that assumes `pending` is empty after a `Flush` that threw.
-- **Sync-over-async surface in the Neo4j and AGE providers deadlocks under captured sync contexts.** Safe under ASP.NET Core, console, and modern hosted-service consumers. Unsafe under ASP.NET Classic, WinForms, WPF. Use the async surface in those hosts. **The sync surface is intentional and is not being removed** — the abstraction must accommodate providers that ship sync-only, async-only, or both. The mitigation path is a Roslyn analyzer that flags the sync surface under sync-context-capturing project SDKs, not deletion. See [architecture.md §16](architecture.md#16-known-constraints-and-non-goals).
-- **Provider-author types and consumer types share `OnixLabs.ElementFramework.Abstractions`.** Do not propose a `.Provider` sub-namespace — that was considered and rejected. Hide provider-author types from consumer auto-complete via `[EditorBrowsable(EditorBrowsableState.Advanced)]` instead. The flat-namespace choice was driven by the cost of churning every provider and every using-statement in provider integration tests. See [architecture.md §16](architecture.md#16-known-constraints-and-non-goals).
+- **Sync-over-async surface in the Neo4j and AGE providers deadlocks under captured sync contexts.** Safe under ASP.NET Core, console, and modern hosted-service consumers. Unsafe under ASP.NET Classic, WinForms, WPF. Use the async surface in those hosts. **The sync surface is intentional and is not being removed** — the abstraction must accommodate providers that ship sync-only, async-only, or both. The mitigation path is a Roslyn analyzer that flags the sync surface under sync-context-capturing project SDKs, not deletion.
+- **Provider-author types and consumer types share `OnixLabs.ElementFramework.Abstractions`.** Do not propose a `.Provider` sub-namespace — that was considered and rejected. Hide provider-author types from consumer auto-complete via `[EditorBrowsable(EditorBrowsableState.Advanced)]` instead. The flat-namespace choice was driven by the cost of churning every provider and every using-statement in provider integration tests.
 - **Async executors stream; sync executors materialize.** Both Neo4j's and AGE's `ExecuteAsync` are real async iterators — they hold the cursor / reader and the auto-commit session / connection via `await using` and dispose on enumerator dispose. Open-time failures wrap to `RawStatementException`; mid-stream failures during enumeration propagate raw. The sync `Execute` surface drains the same stream into a list before returning, so sync callers continue to see every failure wrapped at execute time. Don't reintroduce eager materialization in the async path — that's the change that fixed the OOM risk on large result sets.
 - **`Neo4jDriverCache` is process-wide and never evicts.** Fine in production. In test runs against Testcontainers it accumulates one driver per random port until the process exits.
-- **Typed-read row shape is provider-internal.** For framework-emitted reads (`FindById`, `Exists`, `AsEnumerable`), the framework calls `IResultMaterializer.MaterializeNode` / `MaterializeEdge` / `ReadExists` without an alias — the provider's emitter and materializer agree privately on what the row looks like. Don't reintroduce `"n"` / `"r"` / `"count"` hardcoding in framework code; if your work crosses the seam, look at how the Neo4j and in-memory materializers define `NodeAlias` / `EdgeAlias` / `CountAlias` constants alongside their emitter. Traversal returns use `MaterializeNodeAt` / `MaterializeEdgeAt` with the consumer's alias. See [architecture.md §6](architecture.md#6-provider-contract).
+- **Typed-read row shape is provider-internal.** For framework-emitted reads (`FindById`, `Exists`, `AsEnumerable`), the framework calls `IResultMaterializer.MaterializeNode` / `MaterializeEdge` / `ReadExists` without an alias — the provider's emitter and materializer agree privately on what the row looks like. Don't reintroduce `"n"` / `"r"` / `"count"` hardcoding in framework code; if your work crosses the seam, look at how the Neo4j and in-memory materializers define `NodeAlias` / `EdgeAlias` / `CountAlias` constants alongside their emitter. Traversal returns use `MaterializeNodeAt` / `MaterializeEdgeAt` with the consumer's alias.
 - **`InMemoryStore` is not thread-safe.** Concurrent contexts pointing at the same database name will race. The in-memory provider is for tests and small demos.
 - **One ambient transaction at a time.** Calling `BeginTransaction` while another is active throws `GraphTransactionAlreadyActiveException`. Nested transactions are not supported.
 - **`GraphContextOptions` is public but `[EditorBrowsable(Never)]`.** It exists only because the consumer subclass constructor must accept it. Don't hand-instantiate it — go through `AddGraphContext` and the options builder.
@@ -312,8 +312,8 @@ The architectural sharp edges that trip up first-time contributors. Most are exp
 - **Arango has provider-specific quirks driven by Newtonsoft.Json defaults and AQL semantics.** The provider installs a custom `IApiClientSerialization` (`ArangoSerialization`) to fix two foot-guns: (1) Newtonsoft's default `DateParseHandling.DateTime` auto-parses ISO-8601 strings into `DateTime` values with the offset lossily converted to local time — the provider pins `DateParseHandling.None` on the deserializer so date strings stay strings and the materializer can run `DateTimeOffset.Parse` with offset preserved; (2) `CamelCasePropertyNamesContractResolver` camel-cases dictionary keys by default, which would rewrite our bind-vars payload's `"WrittenAt"` to `"writtenAt"` — the provider sets `ProcessDictionaryKeys = false` on the naming strategy so dict keys reach the wire verbatim while C# property names still get camel-cased. AQL also has no built-in `ENDS_WITH` in 3.12; the traversal emitter falls back to `SUBSTRING(text, LENGTH(text) - LENGTH(@p)) == @p`. The `_key` / `_from` / `_to` document conventions are framework-mapped: node label = document collection, relationship type = edge collection, framework key property → `_key`, endpoints encoded as `Collection/_key` document IDs.
 - **Arango Stream Transactions need collections declared at begin time, but the framework's `ChangeTracker` opens the transaction before the pending queue is drained.** The opener works around it by listing every non-system collection in the bound database at begin time and declaring them all as read+write (plus `AllowImplicit = true`). One extra HTTP call per transaction begin; avoids coupling the opener to `IGraphModel`.
 - **Arango requires collections to exist before any write.** Unlike Cypher-family stores, ArangoDB does not auto-create them. Consumers (or test fixtures) call `ArangoSchemaBootstrap.EnsureCollectionsAsync(context, …)` once at startup; it walks `context.Model.Nodes` / `Relationships` and creates any missing collections of the matching document/edge type. This is the reason `IGraphModel.Nodes` / `Relationships` and `GraphContext.Model` are public (the latter marked `[EditorBrowsable(Advanced)]`).
-- **`PredicateTranslator` supports a fixed grammar.** Comparison, boolean composition, null checks, string `Contains`/`StartsWith`/`EndsWith` only. Anything else throws `NotSupportedException` and consumers should use `RawStatement.Execute(...)`. See [architecture.md §7.3–7.4](architecture.md#73-the-predicate-tree).
-- **Diagnostics spans follow `<Layer>.<Operation>` naming, and span tags never carry PII.** The framework emits `ElementFramework.SaveChanges`, `ElementFramework.BeginTransaction`, `ElementFramework.Transaction.Commit`, `ElementFramework.Transaction.Rollback`. Providers emit `Neo4j.ExecuteStatement` / `Neo4j.TranslateTraversal` and `AGE.ExecuteStatement` / `AGE.TranslateTraversal`. Tags only carry structural metadata — operation counts, parameter counts, transaction mode (`ambient` / `auto`), traversal kind / segment count / predicate count / return alias. Never put parameter values, property values, predicate literals, or statement text into tags or counter dimensions. Statement text is also kept out of tags by design; the provider's wire-layer ActivitySource (Neo4j driver, Npgsql) is the right place for that. See [architecture.md §13.5](architecture.md#135-pii-discipline).
+- **`PredicateTranslator` supports a fixed grammar.** Comparison, boolean composition, null checks, string `Contains`/`StartsWith`/`EndsWith` only. Anything else throws `NotSupportedException` and consumers should use `RawStatement.Execute(...)`.
+- **Diagnostics spans follow `<Layer>.<Operation>` naming, and span tags never carry PII.** The framework emits `ElementFramework.SaveChanges`, `ElementFramework.BeginTransaction`, `ElementFramework.Transaction.Commit`, `ElementFramework.Transaction.Rollback`. Providers emit `Neo4j.ExecuteStatement` / `Neo4j.TranslateTraversal` and `AGE.ExecuteStatement` / `AGE.TranslateTraversal`. Tags only carry structural metadata — operation counts, parameter counts, transaction mode (`ambient` / `auto`), traversal kind / segment count / predicate count / return alias. Never put parameter values, property values, predicate literals, or statement text into tags or counter dimensions. Statement text is also kept out of tags by design; the provider's wire-layer ActivitySource (Neo4j driver, Npgsql) is the right place for that.
 - **Auto-flush does not emit `BeginTransaction` / `Commit` spans.** When `SaveChanges` is called without an ambient transaction, the framework opens, flushes, and commits through the provider's transaction surface directly — it does NOT go through `GraphTransactionFactory`, because auto-flush failure must preserve the pending queue while a factory-opened transaction's rollback would clear it. The `SaveChanges` span still fires (with `elementframework.transaction.mode=auto`); the begin/commit/rollback spans only fire on the explicit-transaction path. Conformance tests assert the full four-span set against an explicit `BeginTransactionAsync` + `SaveChangesAsync` + `CommitAsync` cycle.
 
 ---
@@ -322,36 +322,36 @@ The architectural sharp edges that trip up first-time contributors. Most are exp
 
 Quick reference for "I need to change X — what file?"
 
-| If you're changing… | Look at | Cross-reference |
-| --- | --- | --- |
-| The public consumer surface | `GraphContext.cs` (Abstractions), `INodeSet`/`IEdgeSet`/`IGraphTraversal` | [arch §4](architecture.md#4-consumer-surface) |
-| Identity map / pending queue / flush atomicity | `ChangeTracker.cs` | [arch §5.4](architecture.md#54-change-tracking-changetracker) |
-| Model validation, label uniqueness, key resolution | `GraphModel.cs`, `GraphModelBuilder.cs`, `NodeBuilder.cs` | [arch §5.1–5.2](architecture.md#51-model-graphmodel-nodemetadata-relationshipmetadata-propertymetadata) |
-| DI registration / context construction | `ServiceCollectionExtensions.cs`, `GraphContextOptionsBuilder.cs` | [arch §5.3](architecture.md#53-context-construction-graphcontext--graphcontextoptions--graphcontextservices), [arch §8.1](architecture.md#81-registration--first-call) |
-| Transaction lifecycle / rollback semantics | `GraphTransactionFactory.cs`, `RollbackAwareGraphTransaction.cs` | [arch §5.6](architecture.md#56-transaction-lifecycle-graphtransactionfactory-rollbackawaregraphtransaction), [arch §8.3](architecture.md#83-explicit-transaction--rollback-semantics) |
-| Fluent traversal stages | `GraphTraversal.cs`, `PatternStart.cs`, `PatternNode.cs`, `PatternRelationship.cs`, `PatternRelationshipDirected.cs`, `TraversalState.cs` | [arch §7.1](architecture.md#71-fluent-stages) |
-| Lambda → predicate tree compilation | `PredicateTranslator.cs` | [arch §7.4](architecture.md#74-lambda-translation-predicatetranslator) |
-| Predicate tree shape / new predicate types | Abstractions: `TraversalPredicate.cs` and its subtypes (`PropertyComparisonPredicate.cs`, `StringComparisonPredicate.cs`, `NullPredicate.cs`, `AndPredicate.cs`, `OrPredicate.cs`, `NotPredicate.cs`) | [arch §7.3](architecture.md#73-the-predicate-tree) |
-| Cypher emission | `CypherEmitter.cs`, `CypherIdentifier.cs`, `ParameterBinder.cs`, `PropertySerializer.cs` | [arch §9.3](architecture.md#93-cypher-emission-cypheremitter-cypheridentifier-parameterbinder-propertyserializer) |
-| Neo4j transactions / driver caching | `Neo4jGraphTransactionOpener.cs`, `Neo4jGraphTransaction.cs`, `Neo4jDriverCache.cs` | [arch §9.2 and §9.5](architecture.md#92-driver-caching-neo4jdrivercache) |
-| Neo4j result materialization | `Neo4jResultMaterializer.cs` | [arch §9.6](architecture.md#96-materialization-neo4jresultmaterializer) |
-| AGE Cypher emission (cypher() wrapping) | `AgeCypherEmitter.cs`, `CypherIdentifier.cs`, `AgeParameterBinder.cs`, `AgePropertySerializer.cs` | [arch §10.3](architecture.md#103-cypher-emission-agecypheremitter) |
-| AGE Npgsql executor / data-source cache | `AgeRawStatementExecutor.cs`, `AgeDataSourceCache.cs` | [arch §10.4 and §10.2](architecture.md#102-data-source-caching-agedatasourcecache) |
-| AGE transactions | `AgeGraphTransactionOpener.cs`, `AgeGraphTransaction.cs` | [arch §10.5](architecture.md#105-transactions-agegraphtransactionopener-agegraphtransaction) |
-| AGE result materialization / agtype parser | `AgeResultMaterializer.cs`, `AgtypeReader.cs`, `AgtypeWriter.cs` | [arch §10.6](architecture.md#106-materialization-ageresultmaterializer-agtypereader-agtypewriter) |
-| ArangoDB AQL emission | `ArangoStatementEmitter.cs`, `ArangoTraversalEmitter.cs`, `ArangoPropertySerializer.cs` | [arch §11.4 and §11.7](architecture.md#114-aql-emission-arangostatementemitter-arangopropertyserializer-arangotraversalemitter) |
-| ArangoDB client + serializer | `ArangoClientCache.cs`, `ArangoSerialization.cs` | [arch §11.2 and §11.3](architecture.md#112-client-caching-arangoclientcache) |
-| ArangoDB executor / transactions | `ArangoRawStatementExecutor.cs`, `ArangoGraphTransactionOpener.cs`, `ArangoGraphTransaction.cs` | [arch §11.5 and §11.6](architecture.md#115-execution-arangorawstatementexecutor) |
-| ArangoDB result materialization | `ArangoResultMaterializer.cs`, `ArangoJsonReader.cs` | [arch §11.8](architecture.md#118-materialization-arangoresultmaterializer-arangojsonreader) |
-| ArangoDB schema bootstrap | `ArangoSchemaBootstrap.cs` | [arch §11.9](architecture.md#119-schema-bootstrap-arangoschemabootstrap) |
-| In-memory store / snapshot transactions | `InMemoryStore.cs`, `InMemoryStoreRegistry.cs`, `InMemoryGraphTransaction.cs`, `InMemoryGraphTransactionOpener.cs` | [arch §12.2 and §12.5](architecture.md#122-storage-inmemorystore-inmemorystoreregistry-inmemoryedge) |
-| In-memory op-coded statements | `InMemoryStatementEmitter.cs`, `InMemoryRawStatementExecutor.cs` | [arch §12.3](architecture.md#123-op-coded-statements-inmemorystatementemitter-inmemoryrawstatementexecutor) |
-| In-memory pattern walk / predicate evaluator | `InMemoryTraversalTranslator.cs` | [arch §12.6](architecture.md#126-traversal-inmemorytraversaltranslator) |
-| Test fixtures (blog application) | `OnixLabs.ElementFramework.Conformance/TestFixtures/BlogApplication/` | [arch §14.2](architecture.md#142-conformance-suite-onixlabselementframeworkconformance) |
-| Conformance suite (provider-agnostic tests) | `OnixLabs.ElementFramework.Conformance/AbstractGraphContextIntegrationTests.cs` | [arch §14.2](architecture.md#142-conformance-suite-onixlabselementframeworkconformance) |
-| Unit-test fakes | `OnixLabs.ElementFramework.UnitTests/TestFixtures.cs` | [arch §14.1](architecture.md#141-unit-tests) |
-| CI pipeline | `.github/workflows/ci.yml` | [arch §14.4](architecture.md#144-ci) |
-| Framework diagnostics surface | `ElementFrameworkDiagnostics.cs` | [arch §13](architecture.md#13-diagnostics-surface) |
-| Provider diagnostics surface | `Neo4jDiagnostics.cs`, `AgeDiagnostics.cs`, `ArangoDiagnostics.cs` | [arch §13.3](architecture.md#133-provider-spans) |
+| If you're changing… | Look at |
+| --- | --- |
+| The public consumer surface | `GraphContext.cs` (Abstractions), `INodeSet`/`IEdgeSet`/`IGraphTraversal` |
+| Identity map / pending queue / flush atomicity | `ChangeTracker.cs` |
+| Model validation, label uniqueness, key resolution | `GraphModel.cs`, `GraphModelBuilder.cs`, `NodeBuilder.cs` |
+| DI registration / context construction | `ServiceCollectionExtensions.cs`, `GraphContextOptionsBuilder.cs` |
+| Transaction lifecycle / rollback semantics | `GraphTransactionFactory.cs`, `RollbackAwareGraphTransaction.cs` |
+| Fluent traversal stages | `GraphTraversal.cs`, `PatternStart.cs`, `PatternNode.cs`, `PatternRelationship.cs`, `PatternRelationshipDirected.cs`, `TraversalState.cs` |
+| Lambda → predicate tree compilation | `PredicateTranslator.cs` |
+| Predicate tree shape / new predicate types | Abstractions: `TraversalPredicate.cs` and its subtypes (`PropertyComparisonPredicate.cs`, `StringComparisonPredicate.cs`, `NullPredicate.cs`, `AndPredicate.cs`, `OrPredicate.cs`, `NotPredicate.cs`) |
+| Cypher emission | `CypherEmitter.cs`, `CypherIdentifier.cs`, `ParameterBinder.cs`, `PropertySerializer.cs` |
+| Neo4j transactions / driver caching | `Neo4jGraphTransactionOpener.cs`, `Neo4jGraphTransaction.cs`, `Neo4jDriverCache.cs` |
+| Neo4j result materialization | `Neo4jResultMaterializer.cs` |
+| AGE Cypher emission (cypher() wrapping) | `AgeCypherEmitter.cs`, `CypherIdentifier.cs`, `AgeParameterBinder.cs`, `AgePropertySerializer.cs` |
+| AGE Npgsql executor / data-source cache | `AgeRawStatementExecutor.cs`, `AgeDataSourceCache.cs` |
+| AGE transactions | `AgeGraphTransactionOpener.cs`, `AgeGraphTransaction.cs` |
+| AGE result materialization / agtype parser | `AgeResultMaterializer.cs`, `AgtypeReader.cs`, `AgtypeWriter.cs` |
+| ArangoDB AQL emission | `ArangoStatementEmitter.cs`, `ArangoTraversalEmitter.cs`, `ArangoPropertySerializer.cs` |
+| ArangoDB client + serializer | `ArangoClientCache.cs`, `ArangoSerialization.cs` |
+| ArangoDB executor / transactions | `ArangoRawStatementExecutor.cs`, `ArangoGraphTransactionOpener.cs`, `ArangoGraphTransaction.cs` |
+| ArangoDB result materialization | `ArangoResultMaterializer.cs`, `ArangoJsonReader.cs` |
+| ArangoDB schema bootstrap | `ArangoSchemaBootstrap.cs` |
+| In-memory store / snapshot transactions | `InMemoryStore.cs`, `InMemoryStoreRegistry.cs`, `InMemoryGraphTransaction.cs`, `InMemoryGraphTransactionOpener.cs` |
+| In-memory op-coded statements | `InMemoryStatementEmitter.cs`, `InMemoryRawStatementExecutor.cs` |
+| In-memory pattern walk / predicate evaluator | `InMemoryTraversalTranslator.cs` |
+| Test fixtures (blog application) | `OnixLabs.ElementFramework.Conformance/TestFixtures/BlogApplication/` |
+| Conformance suite (provider-agnostic tests) | `OnixLabs.ElementFramework.Conformance/AbstractGraphContextIntegrationTests.cs` |
+| Unit-test fakes | `OnixLabs.ElementFramework.UnitTests/TestFixtures.cs` |
+| CI pipeline | `.github/workflows/ci.yml` |
+| Framework diagnostics surface | `ElementFrameworkDiagnostics.cs` |
+| Provider diagnostics surface | `Neo4jDiagnostics.cs`, `AgeDiagnostics.cs`, `ArangoDiagnostics.cs` |
 
-When adding a new provider, the checklist is in [architecture.md §15](architecture.md#15-adding-a-new-provider).
+When adding a new provider, the wiki's per-provider pages are the best worked examples — Neo4j is the densest, AGE shows the SQL-wrap pattern, Arango shows the non-Cypher path, In-Memory is the minimum viable shape.
