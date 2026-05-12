@@ -21,7 +21,8 @@
 // SOFTWARE.
 
 using Microsoft.Extensions.DependencyInjection;
-using OnixLabs.ElementFramework.Neo4j.IntegrationTests.TestFixtures.BlogApplication;
+using OnixLabs.ElementFramework.Conformance;
+using OnixLabs.ElementFramework.Conformance.TestFixtures.BlogApplication;
 using Xunit.Abstractions;
 
 namespace OnixLabs.ElementFramework.Neo4j.IntegrationTests;
@@ -32,4 +33,6 @@ public sealed class Neo4jGraphContextIntegrationTests(ITestOutputHelper output, 
     protected override void ConfigureServices(IServiceCollection services) =>
         services.AddGraphContext<BlogGraphContext>(builder =>
             builder.UseNeo4j(() => fixture.ConnectionString, fixture.AuthToken));
+
+    protected override string? ProviderSourceName => Neo4jDiagnostics.SourceName;
 }

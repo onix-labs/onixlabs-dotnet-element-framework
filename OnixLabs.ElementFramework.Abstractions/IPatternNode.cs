@@ -49,6 +49,49 @@ public interface IPatternNode<TNode> where TNode : class
     IPatternNode<TNode> Where(Expression<Func<TNode, bool>> predicate);
 
     /// <summary>
+    /// Orders the returned rows ascending by a property of the bound node. v1 supports a single ordering clause per traversal — calling <c>OrderBy</c> or <see cref="OrderByDescending{TKey}"/> twice on the same traversal throws.
+    /// </summary>
+    /// <typeparam name="TKey">The CLR type of the property the ordering is keyed on.</typeparam>
+    /// <param name="selector">A single-property selector over the bound node (e.g. <c>a =&gt; a.Name</c>). Anything richer throws <see cref="NotSupportedException"/>.</param>
+    /// <returns>Returns the same node stage to allow further chaining.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="selector"/> is <see langword="null"/>.</exception>
+    /// <exception cref="InvalidOperationException">Thrown when an ordering has already been applied to the traversal.</exception>
+    /// <exception cref="NotSupportedException">Thrown when <paramref name="selector"/> is not a single-property access on the bound parameter.</exception>
+    IPatternNode<TNode> OrderBy<TKey>(Expression<Func<TNode, TKey>> selector);
+
+    /// <summary>
+    /// Orders the returned rows descending by a property of the bound node. v1 supports a single ordering clause per traversal — calling <see cref="OrderBy{TKey}"/> or <c>OrderByDescending</c> twice on the same traversal throws.
+    /// </summary>
+    /// <typeparam name="TKey">The CLR type of the property the ordering is keyed on.</typeparam>
+    /// <param name="selector">A single-property selector over the bound node. See <see cref="OrderBy{TKey}"/> for the supported shape.</param>
+    /// <returns>Returns the same node stage to allow further chaining.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="selector"/> is <see langword="null"/>.</exception>
+    /// <exception cref="InvalidOperationException">Thrown when an ordering has already been applied to the traversal.</exception>
+    /// <exception cref="NotSupportedException">Thrown when <paramref name="selector"/> is not a single-property access on the bound parameter.</exception>
+    IPatternNode<TNode> OrderByDescending<TKey>(Expression<Func<TNode, TKey>> selector);
+
+    /// <summary>
+    /// Skips the first <paramref name="count"/> rows of the result set. v1 supports a single skip clause per traversal — calling <c>Skip</c> twice on the same traversal throws.
+    /// </summary>
+    /// <param name="count">The number of leading rows to skip. Must be non-negative.</param>
+    /// <returns>Returns the same node stage to allow further chaining.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="count"/> is negative.</exception>
+    /// <exception cref="InvalidOperationException">Thrown when a skip clause has already been applied to the traversal.</exception>
+    IPatternNode<TNode> Skip(int count);
+
+    /// <summary>
+    /// Takes the first <paramref name="count"/> rows of the result set. v1 supports a single take clause per traversal — calling <c>Take</c> twice on the same traversal throws.
+    /// </summary>
+    /// <remarks>
+    /// Named after LINQ's <see cref="System.Linq.Enumerable.Take{TSource}(IEnumerable{TSource}, int)"/> so the consumer surface reads as <c>Skip(n).Take(m)</c> in keeping with the rest of .NET. Each provider's emitter is responsible for translating <see cref="TraversalAst.Take"/> to its query-language equivalent (Cypher's <c>LIMIT</c>, SQL's <c>FETCH FIRST</c>, and so on).
+    /// </remarks>
+    /// <param name="count">The maximum number of rows the traversal returns. Must be non-negative.</param>
+    /// <returns>Returns the same node stage to allow further chaining.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="count"/> is negative.</exception>
+    /// <exception cref="InvalidOperationException">Thrown when a take clause has already been applied to the traversal.</exception>
+    IPatternNode<TNode> Take(int count);
+
+    /// <summary>
     /// Closes the pattern with a return of the specified alias and executes it.
     /// </summary>
     /// <typeparam name="TResult">The CLR type of the returned variable.</typeparam>

@@ -49,7 +49,7 @@ internal sealed class EdgeSet<T>(
     {
         DataStatement statement = emitter.EmitAsEnumerableEdges<T>(model);
         IEnumerable<IReadOnlyDictionary<string, object?>> rows = executor.Execute(statement.Statement, statement.Parameters);
-        return rows.Select(row => materializer.MaterializeEdge<T>(model, row, "r")).ToList();
+        return rows.Select(row => materializer.MaterializeEdge<T>(model, row)).ToList();
     }
 
     /// <inheritdoc/>
@@ -59,7 +59,7 @@ internal sealed class EdgeSet<T>(
         IAsyncEnumerable<IReadOnlyDictionary<string, object?>> rows =
             executor.ExecuteAsync(statement.Statement, statement.Parameters, token);
         await foreach (IReadOnlyDictionary<string, object?> row in rows.ConfigureAwait(false))
-            yield return materializer.MaterializeEdge<T>(model, row, "r");
+            yield return materializer.MaterializeEdge<T>(model, row);
     }
 
     /// <inheritdoc/>

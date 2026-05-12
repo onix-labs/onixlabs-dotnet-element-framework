@@ -20,6 +20,8 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using Neo4j.Driver;
 
 namespace OnixLabs.ElementFramework;
@@ -67,11 +69,17 @@ public static class GraphContextOptionsBuilderExtensions
     {
         ArgumentNullException.ThrowIfNull(connectionStringFactory);
 
+        ILoggerFactory? loggerFactory = builder.LoggerFactory;
+        ILogger<Neo4jCypherExecutor> executorLogger = loggerFactory?.CreateLogger<Neo4jCypherExecutor>() ?? NullLogger<Neo4jCypherExecutor>.Instance;
+        ILogger<Neo4jGraphTransactionOpener> openerLogger = loggerFactory?.CreateLogger<Neo4jGraphTransactionOpener>() ?? NullLogger<Neo4jGraphTransactionOpener>.Instance;
+        ILogger<Neo4jGraphTransaction> transactionLogger = loggerFactory?.CreateLogger<Neo4jGraphTransaction>() ?? NullLogger<Neo4jGraphTransaction>.Instance;
+        ILogger driverCacheLogger = loggerFactory?.CreateLogger(typeof(Neo4jDriverCache)) ?? NullLogger.Instance;
+
         Lazy<IDriver> driver = new(DriverFactory, LazyThreadSafetyMode.ExecutionAndPublication);
         CypherEmitter emitter = new();
         Neo4jResultMaterializer materializer = new();
-        Neo4jGraphTransactionOpener opener = new(driver);
-        Neo4jCypherExecutor executor = new(driver, opener);
+        Neo4jGraphTransactionOpener opener = new(driver, openerLogger, transactionLogger);
+        Neo4jCypherExecutor executor = new(driver, opener, executorLogger);
         Neo4jTraversalTranslator translator = new(emitter, executor, materializer);
 
         return builder
@@ -81,6 +89,6 @@ public static class GraphContextOptionsBuilderExtensions
             .UseGraphTransactionOpener(opener)
             .UseTraversalTranslator(translator);
 
-        IDriver DriverFactory() => Neo4jDriverCache.GetOrCreate(connectionStringFactory(), authToken);
+        IDriver DriverFactory() => Neo4jDriverCache.GetOrCreate(connectionStringFactory(), authToken, driverCacheLogger);
     }
 }

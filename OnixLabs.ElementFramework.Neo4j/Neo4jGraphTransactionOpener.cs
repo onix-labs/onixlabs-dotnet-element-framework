@@ -20,6 +20,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
+using Microsoft.Extensions.Logging;
 using Neo4j.Driver;
 
 namespace OnixLabs.ElementFramework;
@@ -30,13 +31,34 @@ namespace OnixLabs.ElementFramework;
 /// <remarks>
 /// Each successful <see cref="Open"/> creates a new <see cref="IAsyncSession"/> and <see cref="IAsyncTransaction"/> pair, wraps them in a <see cref="Neo4jGraphTransaction"/>, and stores the wrapper as the ambient transaction; the wrapper calls <see cref="ClearActive"/> on commit, rollback, or dispose. V1 is one-ambient-at-a-time: opening a second transaction while another is active throws <see cref="GraphTransactionAlreadyActiveException"/>. Sync paths bridge to async via <c>GetAwaiter().GetResult()</c>.
 /// </remarks>
-/// <param name="driver">A lazy handle to the shared <see cref="IDriver"/> for the bound Neo4j endpoint. Resolution defers to the moment a transaction is first opened, allowing the connection string to be deferred past <c>AddGraphContext</c> registration time.</param>
-internal sealed class Neo4jGraphTransactionOpener(Lazy<IDriver> driver) : IGraphTransactionOpener
+internal sealed class Neo4jGraphTransactionOpener : IGraphTransactionOpener
 {
+    /// <summary>The lazy driver handle.</summary>
+    private readonly Lazy<IDriver> driver;
+
+    /// <summary>The logger this opener writes diagnostic events to.</summary>
+    private readonly ILogger<Neo4jGraphTransactionOpener> logger;
+
+    /// <summary>The shared logger handed to every <see cref="Neo4jGraphTransaction"/> this opener spawns. All spawned transactions share one logger instance because <see cref="ILogger{TCategoryName}"/>'s category is keyed by type, not instance.</summary>
+    private readonly ILogger<Neo4jGraphTransaction> transactionLogger;
+
     /// <summary>
     /// The currently-active ambient transaction for this opener, or <see langword="null"/> when none is open.
     /// </summary>
     private Neo4jGraphTransaction? active;
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="Neo4jGraphTransactionOpener"/> class.
+    /// </summary>
+    /// <param name="driver">A lazy handle to the shared <see cref="IDriver"/> for the bound Neo4j endpoint. Resolution defers to the moment a transaction is first opened, allowing the connection string to be deferred past <c>AddGraphContext</c> registration time.</param>
+    /// <param name="logger">The typed logger this opener writes diagnostic events to.</param>
+    /// <param name="transactionLogger">The typed logger every spawned <see cref="Neo4jGraphTransaction"/> receives. Pass <see cref="Microsoft.Extensions.Logging.Abstractions.NullLogger{T}.Instance"/> for both arguments to disable logging.</param>
+    internal Neo4jGraphTransactionOpener(Lazy<IDriver> driver, ILogger<Neo4jGraphTransactionOpener> logger, ILogger<Neo4jGraphTransaction> transactionLogger)
+    {
+        this.driver = driver;
+        this.logger = logger;
+        this.transactionLogger = transactionLogger;
+    }
 
     /// <inheritdoc/>
     public IGraphTransaction? Active => active;
@@ -75,6 +97,7 @@ internal sealed class Neo4jGraphTransactionOpener(Lazy<IDriver> driver) : IGraph
         }
         catch (Exception exception)
         {
+            logger.LogWarning(exception, "Failed to open Neo4j async session.");
             throw new GraphTransactionException("Failed to open a graph transaction against the Neo4j endpoint.", exception);
         }
 
@@ -84,12 +107,14 @@ internal sealed class Neo4jGraphTransactionOpener(Lazy<IDriver> driver) : IGraph
         }
         catch (Exception exception)
         {
+            logger.LogWarning(exception, "Failed to begin Neo4j transaction; closing session.");
             await session.CloseAsync().ConfigureAwait(false);
             throw new GraphTransactionException("Failed to open a graph transaction against the Neo4j endpoint.", exception);
         }
 
-        Neo4jGraphTransaction wrapped = new(session, transaction, this);
+        Neo4jGraphTransaction wrapped = new(session, transaction, this, transactionLogger);
         active = wrapped;
+        logger.LogInformation("Neo4j graph transaction opened.");
         return wrapped;
     }
 }

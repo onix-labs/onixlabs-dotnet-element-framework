@@ -20,6 +20,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
+using System.Diagnostics;
 using System.Runtime.CompilerServices;
 
 namespace OnixLabs.ElementFramework;
@@ -41,6 +42,7 @@ internal sealed class Neo4jTraversalTranslator(
     /// <inheritdoc/>
     public IEnumerable<TResult> Translate<TResult>(IGraphModel model, TraversalAst ast)
     {
+        using Activity? activity = StartTranslateActivity(ast);
         IEnumerable<IReadOnlyDictionary<string, object?>> rows;
         ReturnKind kind;
 
@@ -52,6 +54,7 @@ internal sealed class Neo4jTraversalTranslator(
         }
         catch (Exception exception)
         {
+            RecordTranslateFailure(activity, exception);
             throw new TraversalTranslationException("Failed to translate or execute the supplied fluent traversal against the Neo4j endpoint.", exception);
         }
 
@@ -64,9 +67,11 @@ internal sealed class Neo4jTraversalTranslator(
         }
         catch (Exception exception)
         {
+            RecordTranslateFailure(activity, exception);
             throw new TraversalTranslationException("Failed to translate or execute the supplied fluent traversal against the Neo4j endpoint.", exception);
         }
 
+        activity?.SetStatus(ActivityStatusCode.Ok);
         return results;
     }
 
@@ -87,6 +92,7 @@ internal sealed class Neo4jTraversalTranslator(
         TraversalAst ast,
         [EnumeratorCancellation] CancellationToken token)
     {
+        Activity? activity = StartTranslateActivity(ast);
         IAsyncEnumerable<IReadOnlyDictionary<string, object?>> rows;
         ReturnKind kind;
 
@@ -95,14 +101,45 @@ internal sealed class Neo4jTraversalTranslator(
             DataStatement statement = emitter.EmitTraversal(model, ast);
             rows = executor.ExecuteAsync(statement.Statement, statement.Parameters, token);
             kind = ResolveReturnKind(ast);
+            activity?.SetStatus(ActivityStatusCode.Ok);
         }
         catch (Exception exception)
         {
+            RecordTranslateFailure(activity, exception);
+            activity?.Dispose();
             throw new TraversalTranslationException("Failed to translate or execute the supplied fluent traversal against the Neo4j endpoint.", exception);
         }
 
+        // The span ends once translation + execute have completed; downstream enumeration of `rows`
+        // is covered by the executor's own ExecuteStatement span (and the Neo4j driver's wire-layer
+        // ActivitySource). Disposing here keeps the translate span tight to the actual translation work.
+        activity?.Dispose();
+
         await foreach (IReadOnlyDictionary<string, object?> row in rows.WithCancellation(token).ConfigureAwait(false))
             yield return Materialize<TResult>(model, row, ast.ReturnAlias, kind);
+    }
+
+    /// <summary>
+    /// Starts a <c>Neo4j.TranslateTraversal</c> span tagged with the traversal kind, segment count, and return alias.
+    /// </summary>
+    private static Activity? StartTranslateActivity(TraversalAst ast)
+    {
+        Activity? activity = Neo4jDiagnostics.Source.StartActivity("Neo4j.TranslateTraversal", ActivityKind.Internal);
+        activity?.SetTag("elementframework.traversal.kind", ast.Kind.ToString());
+        activity?.SetTag("elementframework.traversal.segment_count", ast.Segments.Count);
+        activity?.SetTag("elementframework.traversal.predicate_count", ast.Predicates.Count);
+        activity?.SetTag("elementframework.traversal.return_alias", ast.ReturnAlias);
+        activity?.SetTag("db.system", "neo4j");
+        return activity;
+    }
+
+    /// <summary>
+    /// Marks the supplied <paramref name="activity"/> as failed with status + exception type.
+    /// </summary>
+    private static void RecordTranslateFailure(Activity? activity, Exception exception)
+    {
+        activity?.SetStatus(ActivityStatusCode.Error, exception.Message);
+        activity?.SetTag("exception.type", exception.GetType().FullName);
     }
 
     /// <summary>
@@ -121,8 +158,8 @@ internal sealed class Neo4jTraversalTranslator(
         string alias,
         ReturnKind kind) => kind switch
     {
-        ReturnKind.Node => materializer.MaterializeNode<TResult>(model, row, alias),
-        ReturnKind.Edge => materializer.MaterializeEdge<TResult>(model, row, alias),
+        ReturnKind.Node => materializer.MaterializeNodeAt<TResult>(model, row, alias),
+        ReturnKind.Edge => materializer.MaterializeEdgeAt<TResult>(model, row, alias),
         _ => throw new TraversalTranslationException($"Unknown return kind '{kind}'.")
     };
 

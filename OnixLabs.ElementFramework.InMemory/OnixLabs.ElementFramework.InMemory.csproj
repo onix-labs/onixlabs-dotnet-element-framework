@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <IsPackable>true</IsPackable>
+        <RootNamespace>OnixLabs.ElementFramework</RootNamespace>
+    </PropertyGroup>
+    <ItemGroup>
+        <ProjectReference Include="..\OnixLabs.ElementFramework\OnixLabs.ElementFramework.csproj"/>
+    </ItemGroup>
+</Project>

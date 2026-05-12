@@ -49,7 +49,7 @@ internal sealed class NodeSet<T>(
     {
         DataStatement statement = emitter.EmitAsEnumerableNodes<T>(model);
         IEnumerable<IReadOnlyDictionary<string, object?>> rows = executor.Execute(statement.Statement, statement.Parameters);
-        return rows.Select(row => materializer.MaterializeNode<T>(model, row, "n")).ToList();
+        return rows.Select(row => materializer.MaterializeNode<T>(model, row)).ToList();
     }
 
     /// <inheritdoc/>
@@ -59,7 +59,7 @@ internal sealed class NodeSet<T>(
         IAsyncEnumerable<IReadOnlyDictionary<string, object?>> rows =
             executor.ExecuteAsync(statement.Statement, statement.Parameters, token);
         await foreach (IReadOnlyDictionary<string, object?> row in rows.ConfigureAwait(false))
-            yield return materializer.MaterializeNode<T>(model, row, "n");
+            yield return materializer.MaterializeNode<T>(model, row);
     }
 
     /// <inheritdoc/>
@@ -67,7 +67,7 @@ internal sealed class NodeSet<T>(
     {
         DataStatement statement = emitter.EmitExists<T>(model, id);
         IReadOnlyDictionary<string, object?> row = executor.Execute(statement.Statement, statement.Parameters).First();
-        return row["count"] is long and > 0;
+        return materializer.ReadExists(row);
     }
 
     /// <inheritdoc/>
@@ -77,7 +77,7 @@ internal sealed class NodeSet<T>(
         IAsyncEnumerable<IReadOnlyDictionary<string, object?>> rows =
             executor.ExecuteAsync(statement.Statement, statement.Parameters, token);
         await foreach (IReadOnlyDictionary<string, object?> row in rows.ConfigureAwait(false))
-            return row["count"] is long and > 0;
+            return materializer.ReadExists(row);
         return false;
     }
 
@@ -91,7 +91,7 @@ internal sealed class NodeSet<T>(
         IReadOnlyDictionary<string, object?>? row = executor.Execute(statement.Statement, statement.Parameters).FirstOrDefault();
         if (row is null) return null;
 
-        T instance = materializer.MaterializeNode<T>(model, row, "n");
+        T instance = materializer.MaterializeNode<T>(model, row);
         tracker.Attach(instance);
         return instance;
     }
@@ -107,7 +107,7 @@ internal sealed class NodeSet<T>(
             executor.ExecuteAsync(statement.Statement, statement.Parameters, token);
         await foreach (IReadOnlyDictionary<string, object?> row in rows.ConfigureAwait(false))
         {
-            T instance = materializer.MaterializeNode<T>(model, row, "n");
+            T instance = materializer.MaterializeNode<T>(model, row);
             tracker.Attach(instance);
             return instance;
         }

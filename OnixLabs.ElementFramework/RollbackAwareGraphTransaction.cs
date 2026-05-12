@@ -20,6 +20,8 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
+using System.Diagnostics;
+
 namespace OnixLabs.ElementFramework;
 
 /// <summary>
@@ -45,31 +47,71 @@ internal sealed class RollbackAwareGraphTransaction(IGraphTransaction inner, ICh
     /// <inheritdoc/>
     public void Commit()
     {
-        inner.Commit();
-        resetOnDispose = false;
+        using Activity? activity = ElementFrameworkDiagnostics.Source.StartActivity("ElementFramework.Transaction.Commit", ActivityKind.Internal);
+        try
+        {
+            inner.Commit();
+            resetOnDispose = false;
+            RecordTerminal(activity, "committed");
+        }
+        catch (Exception exception)
+        {
+            RecordTerminalFailure(activity, "commit_failed", exception);
+            throw;
+        }
     }
 
     /// <inheritdoc/>
     public async Task CommitAsync(CancellationToken token = default)
     {
-        await inner.CommitAsync(token).ConfigureAwait(false);
-        resetOnDispose = false;
+        using Activity? activity = ElementFrameworkDiagnostics.Source.StartActivity("ElementFramework.Transaction.Commit", ActivityKind.Internal);
+        try
+        {
+            await inner.CommitAsync(token).ConfigureAwait(false);
+            resetOnDispose = false;
+            RecordTerminal(activity, "committed");
+        }
+        catch (Exception exception)
+        {
+            RecordTerminalFailure(activity, "commit_failed", exception);
+            throw;
+        }
     }
 
     /// <inheritdoc/>
     public void Rollback()
     {
-        inner.Rollback();
-        tracker.Reset();
-        resetOnDispose = false;
+        using Activity? activity = ElementFrameworkDiagnostics.Source.StartActivity("ElementFramework.Transaction.Rollback", ActivityKind.Internal);
+        try
+        {
+            inner.Rollback();
+            tracker.Reset();
+            resetOnDispose = false;
+            RecordTerminal(activity, "rolledback");
+        }
+        catch (Exception exception)
+        {
+            RecordTerminalFailure(activity, "rollback_failed", exception);
+            throw;
+        }
     }
 
     /// <inheritdoc/>
     public async Task RollbackAsync(CancellationToken token = default)
     {
-        await inner.RollbackAsync(token).ConfigureAwait(false);
-        tracker.Reset();
-        resetOnDispose = false;
+        using Activity? activity = ElementFrameworkDiagnostics.Source.StartActivity("ElementFramework.Transaction.Rollback", ActivityKind.Internal);
+        try
+        {
+            await inner.RollbackAsync(token).ConfigureAwait(false);
+            tracker.Reset();
+            resetOnDispose = false;
+            RecordTerminal(activity, "rolledback");
+        }
+        catch (Exception exception)
+        {
+            RecordTerminalFailure(activity, "rollback_failed", exception);
+            throw;
+        }
     }
 
     /// <inheritdoc/>
@@ -77,7 +119,10 @@ internal sealed class RollbackAwareGraphTransaction(IGraphTransaction inner, ICh
     {
         inner.Dispose();
         if (resetOnDispose)
+        {
             tracker.Reset();
+            ElementFrameworkDiagnostics.TransactionTerminalsCounter.Add(1, new KeyValuePair<string, object?>("outcome", "disposed_without_terminal"));
+        }
     }
 
     /// <inheritdoc/>
@@ -85,6 +130,28 @@ internal sealed class RollbackAwareGraphTransaction(IGraphTransaction inner, ICh
     {
         await inner.DisposeAsync().ConfigureAwait(false);
         if (resetOnDispose)
+        {
             tracker.Reset();
+            ElementFrameworkDiagnostics.TransactionTerminalsCounter.Add(1, new KeyValuePair<string, object?>("outcome", "disposed_without_terminal"));
+        }
+    }
+
+    /// <summary>
+    /// Marks the terminal <paramref name="activity"/> as successful and ticks the transactions-terminals counter with the corresponding outcome tag.
+    /// </summary>
+    private static void RecordTerminal(Activity? activity, string outcome)
+    {
+        activity?.SetStatus(ActivityStatusCode.Ok);
+        ElementFrameworkDiagnostics.TransactionTerminalsCounter.Add(1, new KeyValuePair<string, object?>("outcome", outcome));
+    }
+
+    /// <summary>
+    /// Marks the terminal <paramref name="activity"/> as failed and ticks the transactions-terminals counter with the corresponding outcome tag.
+    /// </summary>
+    private static void RecordTerminalFailure(Activity? activity, string outcome, Exception exception)
+    {
+        activity?.SetStatus(ActivityStatusCode.Error, exception.Message);
+        activity?.SetTag("exception.type", exception.GetType().FullName);
+        ElementFrameworkDiagnostics.TransactionTerminalsCounter.Add(1, new KeyValuePair<string, object?>("outcome", outcome));
     }
 }

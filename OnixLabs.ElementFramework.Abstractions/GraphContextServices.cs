@@ -30,10 +30,12 @@ namespace OnixLabs.ElementFramework;
 /// <param name="TransactionFactory">The factory that opens graph transactions for the owning context.</param>
 /// <param name="Traversal">The fluent traversal entry point bound to this context's model and the provider's translator.</param>
 /// <param name="RawStatementExecutor">The provider's raw statement executor for the owning context.</param>
+/// <param name="Model">The frozen graph model resolved for the owning context.</param>
 internal sealed record GraphContextServices(
     IChangeTracker ChangeTracker,
     IGraphSetFactory SetFactory,
     IGraphTransactionFactory TransactionFactory,
     IGraphTraversal Traversal,
-    IRawStatementExecutor RawStatementExecutor
+    IRawStatementExecutor RawStatementExecutor,
+    IGraphModel Model
 );

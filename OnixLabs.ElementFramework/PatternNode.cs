@@ -21,6 +21,7 @@
 // SOFTWARE.
 
 using System.Linq.Expressions;
+using System.Reflection;
 
 namespace OnixLabs.ElementFramework;
 
@@ -57,6 +58,34 @@ internal sealed class PatternNode<TNode>(TraversalState state, string alias) : I
     }
 
     /// <inheritdoc/>
+    public IPatternNode<TNode> OrderBy<TKey>(Expression<Func<TNode, TKey>> selector) =>
+        AccumulateOrdering(selector, OrderDirection.Ascending);
+
+    /// <inheritdoc/>
+    public IPatternNode<TNode> OrderByDescending<TKey>(Expression<Func<TNode, TKey>> selector) =>
+        AccumulateOrdering(selector, OrderDirection.Descending);
+
+    /// <inheritdoc/>
+    public IPatternNode<TNode> Skip(int count)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegative(count);
+        if (state.Skip is not null)
+            throw new InvalidOperationException("Skip has already been applied to this traversal. v1 supports a single Skip clause per traversal.");
+        state.Skip = count;
+        return this;
+    }
+
+    /// <inheritdoc/>
+    public IPatternNode<TNode> Take(int count)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegative(count);
+        if (state.Take is not null)
+            throw new InvalidOperationException("Take has already been applied to this traversal. v1 supports a single Take clause per traversal.");
+        state.Take = count;
+        return this;
+    }
+
+    /// <inheritdoc/>
     public IEnumerable<TResult> Return<TResult>(string alias) where TResult : class
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(alias);
@@ -78,5 +107,51 @@ internal sealed class PatternNode<TNode>(TraversalState state, string alias) : I
     /// <param name="returnAlias">The alias to project in the resulting AST.</param>
     /// <returns>Returns an immutable <see cref="TraversalAst"/> representing the accumulated traversal.</returns>
     private TraversalAst BuildAst(string returnAlias) =>
-        new(state.Kind, [..state.Segments], [..state.Predicates], returnAlias);
+        new(state.Kind, [..state.Segments], [..state.Predicates], returnAlias)
+        {
+            Orderings = [..state.Orderings],
+            Skip = state.Skip,
+            Take = state.Take
+        };
+
+    /// <summary>
+    /// Accumulates a single-property ordering clause scoped to the bound alias. Enforces v1's one-ordering-per-traversal invariant and the single-property-access selector shape.
+    /// </summary>
+    /// <typeparam name="TKey">The CLR type of the property the ordering is keyed on.</typeparam>
+    /// <param name="selector">The selector lambda; must be a single property access on the bound parameter.</param>
+    /// <param name="direction">The ordering direction.</param>
+    /// <returns>Returns the same node stage to allow further chaining.</returns>
+    private IPatternNode<TNode> AccumulateOrdering<TKey>(Expression<Func<TNode, TKey>> selector, OrderDirection direction)
+    {
+        ArgumentNullException.ThrowIfNull(selector);
+        if (state.Orderings.Count > 0)
+            throw new InvalidOperationException("An ordering has already been applied to this traversal. v1 supports a single OrderBy / OrderByDescending clause per traversal.");
+        PropertyInfo property = ExtractPropertyAccess(selector);
+        state.Orderings.Add(new TraversalOrdering(alias, property.Name, direction));
+        return this;
+    }
+
+    /// <summary>
+    /// Extracts the single property accessed by an OrderBy / OrderByDescending selector. Unwraps a trailing <see cref="ExpressionType.Convert"/> wrapper that the compiler inserts when the property type does not match the lambda's return type (e.g. boxing a value-typed property to <see cref="object"/>).
+    /// </summary>
+    /// <typeparam name="TKey">The CLR type of the property the selector returns.</typeparam>
+    /// <param name="selector">The selector to inspect.</param>
+    /// <returns>Returns the <see cref="PropertyInfo"/> the selector accesses.</returns>
+    /// <exception cref="NotSupportedException">Thrown when the selector body is not a single property access on the lambda's parameter.</exception>
+    private static PropertyInfo ExtractPropertyAccess<TKey>(Expression<Func<TNode, TKey>> selector)
+    {
+        Expression body = selector.Body is UnaryExpression { NodeType: ExpressionType.Convert } convert
+            ? convert.Operand
+            : selector.Body;
+
+        if (body is MemberExpression { Member: PropertyInfo property, Expression: ParameterExpression candidate }
+            && candidate == selector.Parameters[0])
+        {
+            return property;
+        }
+
+        throw new NotSupportedException(
+            "OrderBy / OrderByDescending selectors must be a single property access on the bound parameter, e.g. 'a => a.Name'. " +
+            "Compound expressions, method calls, and non-property members are not supported in v1.");
+    }
 }
