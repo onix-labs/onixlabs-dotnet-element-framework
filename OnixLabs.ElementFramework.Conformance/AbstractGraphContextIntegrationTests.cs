@@ -61,6 +61,7 @@ public abstract class AbstractGraphContextIntegrationTests(ITestOutputHelper out
     {
         "OnixLabs.ElementFramework.Neo4j" => "Neo4j.ExecuteStatement",
         "OnixLabs.ElementFramework.AGE" => "AGE.ExecuteStatement",
+        "OnixLabs.ElementFramework.Arango" => "Arango.ExecuteStatement",
         _ => string.Empty
     };
 

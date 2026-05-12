@@ -134,6 +134,6 @@ public static class ServiceCollectionExtensions
             model, changeTracker, options.StatementEmitter, options.RawStatementExecutor, options.ResultMaterializer);
         GraphTransactionFactory transactionFactory = new(options.GraphTransactionOpener, changeTracker);
         GraphTraversal traversal = new(model, options.TraversalTranslator);
-        return new GraphContextServices(changeTracker, setFactory, transactionFactory, traversal, options.RawStatementExecutor);
+        return new GraphContextServices(changeTracker, setFactory, transactionFactory, traversal, options.RawStatementExecutor, model);
     }
 }

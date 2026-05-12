@@ -20,22 +20,26 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-namespace OnixLabs.ElementFramework;
+using ArangoDBNetStandard;
+using ArangoDBNetStandard.CursorApi.Models;
+using ArangoDBNetStandard.Transport.Http;
+
+namespace OnixLabs.ElementFramework.Arango.IntegrationTests;
 
 /// <summary>
-/// Represents the bundle of internal coordination services resolved for a single <see cref="GraphContext"/>.
+/// Wire-level smoke test that proves the Testcontainers ArangoDB fixture and the .NET client library can round-trip an AQL query end-to-end. Not part of the conformance suite — exists only as the first proof that the provider's surrounding infrastructure works before we add framework code on top.
 /// </summary>
-/// <param name="ChangeTracker">The change tracker that the owning context delegates entity-state operations to.</param>
-/// <param name="SetFactory">The factory that produces typed-set instances for the owning context.</param>
-/// <param name="TransactionFactory">The factory that opens graph transactions for the owning context.</param>
-/// <param name="Traversal">The fluent traversal entry point bound to this context's model and the provider's translator.</param>
-/// <param name="RawStatementExecutor">The provider's raw statement executor for the owning context.</param>
-/// <param name="Model">The frozen graph model resolved for the owning context.</param>
-internal sealed record GraphContextServices(
-    IChangeTracker ChangeTracker,
-    IGraphSetFactory SetFactory,
-    IGraphTransactionFactory TransactionFactory,
-    IGraphTraversal Traversal,
-    IRawStatementExecutor RawStatementExecutor,
-    IGraphModel Model
-);
+public sealed class ArangoSmokeTests(ArangoFixture fixture) : IClassFixture<ArangoFixture>
+{
+    [Fact(DisplayName = "AQL RETURN 1 round-trips end-to-end through the .NET client")]
+    public async Task AqlReturnOneRoundTrips()
+    {
+        using HttpApiTransport transport = HttpApiTransport.UsingBasicAuth(fixture.Endpoint, ArangoFixture.SystemDatabase, fixture.Username, fixture.Password);
+        using ArangoDBClient client = new(transport);
+
+        CursorResponse<long> cursor = await client.Cursor.PostCursorAsync<long>("RETURN 1");
+
+        Assert.Single(cursor.Result);
+        Assert.Equal(1L, cursor.Result.First());
+    }
+}

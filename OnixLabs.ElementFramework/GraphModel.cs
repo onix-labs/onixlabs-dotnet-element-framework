@@ -65,6 +65,12 @@ internal sealed class GraphModel : IGraphModel
     internal IReadOnlyList<RelationshipMetadata> Relationships { get; }
 
     /// <inheritdoc/>
+    IReadOnlyList<INodeMetadata> IGraphModel.Nodes => Nodes;
+
+    /// <inheritdoc/>
+    IReadOnlyList<IRelationshipMetadata> IGraphModel.Relationships => Relationships;
+
+    /// <inheritdoc/>
     public INodeMetadata GetNode(Type nodeType)
     {
         return nodesByClrType.TryGetValue(nodeType, out NodeMetadata? node)

@@ -20,6 +20,8 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
+using System.ComponentModel;
+
 namespace OnixLabs.ElementFramework;
 
 /// <summary>
@@ -47,6 +49,16 @@ public abstract class GraphContext : IDisposable, IAsyncDisposable
     /// </summary>
     /// <value>The <see cref="IGraphTraversal"/> bound to this context's model and the provider's translator.</value>
     public IGraphTraversal Traversal => services.Traversal;
+
+    /// <summary>
+    /// Gets the frozen graph model resolved for this context.
+    /// </summary>
+    /// <remarks>
+    /// This property exists primarily as a provider-extensibility hook — for example, a provider's schema bootstrap helper that walks the registered nodes and relationships to create backing collections on first use. Consumer application code does not normally need to access the model directly, which is why the property is marked <see cref="EditorBrowsableAttribute"/> <see cref="EditorBrowsableState.Advanced"/>; it stays out of default IntelliSense for consumers but remains accessible to provider authors who know what they're reaching for.
+    /// </remarks>
+    /// <value>The frozen <see cref="IGraphModel"/> describing this context's nodes and relationships.</value>
+    [EditorBrowsable(EditorBrowsableState.Advanced)]
+    public IGraphModel Model => services.Model;
 
     /// <summary>
     /// Gets the raw statement executor that runs provider-native statements against the underlying store.

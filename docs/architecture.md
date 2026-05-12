@@ -14,11 +14,12 @@ A comprehensive tour of the Element Framework, starting from the highest-level v
 8. [Lifecycles](#8-lifecycles)
 9. [Neo4j provider](#9-neo4j-provider)
 10. [Apache AGE provider](#10-apache-age-provider)
-11. [In-memory provider](#11-in-memory-provider)
-12. [Diagnostics surface](#12-diagnostics-surface)
-13. [Testing architecture](#13-testing-architecture)
-14. [Adding a new provider](#14-adding-a-new-provider)
-15. [Known constraints and non-goals](#15-known-constraints-and-non-goals)
+11. [ArangoDB provider](#11-arangodb-provider)
+12. [In-memory provider](#12-in-memory-provider)
+13. [Diagnostics surface](#13-diagnostics-surface)
+14. [Testing architecture](#14-testing-architecture)
+15. [Adding a new provider](#15-adding-a-new-provider)
+16. [Known constraints and non-goals](#16-known-constraints-and-non-goals)
 
 ---
 
@@ -342,7 +343,7 @@ public sealed record TraversalAst(
 
 The segments list alternates `NodePatternSegment` and `RelationshipPatternSegment` and always begins with a node. A `RelationshipPatternSegment` carries an alias, the edge CLR type, and a `RelationshipDirection` (`Outgoing | Incoming | Either`).
 
-The AST is intentionally **linear, not tree-shaped**, because Cypher patterns are linear. This is one of the architectural choices that scopes the framework to Cypher-family stores by design — see [§15](#15-known-constraints-and-non-goals).
+The AST is intentionally **linear, not tree-shaped**, because Cypher patterns are linear. This is one of the architectural choices that scopes the framework to Cypher-family stores by design — see [§16](#16-known-constraints-and-non-goals).
 
 ### 7.3 The predicate tree
 
@@ -506,7 +507,7 @@ A process-wide `ConcurrentDictionary<DriverKey, IDriver>` keyed by `(connectionS
 
 Auth-token equality is reference-based because `IAuthToken` doesn't override equality; two callers building separate `AuthTokens.Basic(...)` objects against the same credentials will create two drivers. In production this is fine (the connection string and auth are constructed once); in tests it's a non-issue because each Testcontainer has a unique connection string.
 
-The cache has no eviction — see [§15](#15-known-constraints-and-non-goals).
+The cache has no eviction — see [§16](#16-known-constraints-and-non-goals).
 
 ### 9.3 Cypher emission: `CypherEmitter`, `CypherIdentifier`, `ParameterBinder`, `PropertySerializer`
 
@@ -537,7 +538,7 @@ The executor is the only place in the provider that talks to Bolt. Its job:
 
 **Sync surface materializes eagerly.** `Execute` drains the entire stream into a list before returning, so sync consumers see the pre-streaming exception model (every failure surfaces at execute time, wrapped). Both surfaces route through the same `StreamAsync` primitive; `MaterializeAllAsync` is the eager adapter.
 
-**Sync surface bridges via `GetAwaiter().GetResult()`.** The Neo4j driver is async-only; the sync methods bridge through a non-context-preserving block. Under hosts that capture a synchronization context (ASP.NET Classic, WinForms, WPF), this deadlocks. ASP.NET Core and console hosts are unaffected. The sync surface is intentional — see [§15 known constraints](#15-known-constraints-and-non-goals): the abstraction must accommodate providers that ship sync-only, async-only, or both, so the sync path is a documented footgun rather than a defect. The `UseNeo4j` xmldoc warns; a Roslyn analyzer that flags the sync surface under risky SDKs is the next mitigation.
+**Sync surface bridges via `GetAwaiter().GetResult()`.** The Neo4j driver is async-only; the sync methods bridge through a non-context-preserving block. Under hosts that capture a synchronization context (ASP.NET Classic, WinForms, WPF), this deadlocks. ASP.NET Core and console hosts are unaffected. The sync surface is intentional — see [§15 known constraints](#16-known-constraints-and-non-goals): the abstraction must accommodate providers that ship sync-only, async-only, or both, so the sync path is a documented footgun rather than a defect. The `UseNeo4j` xmldoc warns; a Roslyn analyzer that flags the sync surface under risky SDKs is the next mitigation.
 
 ### 9.5 Transactions: `Neo4jGraphTransactionOpener`, `Neo4jGraphTransaction`
 
@@ -607,7 +608,7 @@ Each cached data source is built with two crucial pieces of configuration:
 - **`Options=-c search_path=ag_catalog,public`** baked into the connection string. AGE installs its `cypher()` function and `agtype` type under the `ag_catalog` schema, and PostgreSQL's default `search_path` doesn't include it. Setting `search_path` via the connection string's startup-`Options` parameter applies before any query runs and survives across logical opens; doing the same via a `SET` in a physical-connection initializer does *not* — the setting doesn't always persist back to the pool. The emitter additionally schema-qualifies `ag_catalog.cypher(...)` so the SQL form is robust even when callers run with a different search path.
 - **A physical-connection initializer** that runs `CREATE EXTENSION IF NOT EXISTS age` and `SELECT create_graph(graph_name)` if the graph doesn't already exist. AGE's `shared_preload_libraries = 'age'` in the upstream container image means `LOAD 'age'` is not needed per session.
 
-The cache has no eviction — same trade-off as the Neo4j driver cache; flagged in [§15](#15-known-constraints-and-non-goals).
+The cache has no eviction — same trade-off as the Neo4j driver cache; flagged in [§16](#16-known-constraints-and-non-goals).
 
 ### 10.3 Cypher emission: `AgeCypherEmitter`
 
@@ -664,11 +665,98 @@ The four raw-statement conformance tests are skipped against AGE — they send b
 
 ---
 
-## 11. In-memory provider
+## 11. ArangoDB provider
+
+The non-Cypher portability proof. Lives in `OnixLabs.ElementFramework.Arango` and depends on `ArangoDBNetStandard` 3.1.0. ArangoDB is a multi-model store whose query language is **AQL** (a JavaScript-shaped declarative language), with a step-based graph traversal syntax (`FOR v, e IN min..max OUTBOUND start edge_collection`) that bears no syntactic resemblance to Cypher. Where Neo4j and AGE both speak Cypher dialects, the Arango provider exercises the framework's seam against a fundamentally different query language and a non-Bolt, non-Postgres wire (HTTP + JSON). The architectural payoff: it works without changing the abstraction — the same `TraversalAst`, `IStatementEmitter`, `IResultMaterializer`, and `IGraphTransactionOpener` contracts that satisfy Cypher also satisfy AQL.
+
+### 11.1 Wiring: `UseArango`
+
+Two overloads, mirroring the other providers:
+
+- `UseArango(builder, Uri endpoint, string databaseName, string username, string password)` — eager.
+- `UseArango(builder, Func<Uri> endpointFactory, string databaseName, string username, string password)` — lazy. The factory is invoked once, on first client resolution. Used by Testcontainers fixtures whose endpoint URI is only known after the container starts.
+
+Both forms construct the full set of provider services and supply them to the options builder:
+
+```csharp
+Lazy<ArangoDBClient> client = new(() => ArangoClientCache.GetOrCreate(...));
+ArangoStatementEmitter emitter = new();
+ArangoResultMaterializer materializer = new();
+ArangoGraphTransactionOpener opener = new(client.Value, ...);
+ArangoRawStatementExecutor executor = new(client.Value, opener, ...);
+ArangoTraversalTranslator translator = new(emitter, executor, materializer);
+```
+
+### 11.2 Client caching: `ArangoClientCache`
+
+A process-wide `ConcurrentDictionary<(endpoint, database, username, password), ArangoDBClient>`. Each cached client wraps an `HttpApiTransport` and an `ArangoSerialization` (see §11.3) and is reused across `AddGraphContext` resolutions targeting the same endpoint. No eviction — same trade-off as the Neo4j and AGE caches; flagged in [§16](#16-known-constraints-and-non-goals).
+
+### 11.3 Serialization: `ArangoSerialization`
+
+`ArangoDBNetStandard` ships with `JsonNetApiClientSerialization` as its default — Newtonsoft.Json, not System.Text.Json. The framework installs a custom `IApiClientSerialization` (`ArangoSerialization`) to override two defaults that would otherwise corrupt round-tripped data:
+
+- **`DateParseHandling.None`** on the deserializer. Newtonsoft's default (`DateParseHandling.DateTime`) auto-detects ISO-8601-shaped strings during JSON parsing and parses them into `DateTime` values with the offset converted to local time. By the time the materializer sees the value, the offset is gone. Forcing `DateParseHandling.None` keeps date strings as strings so `ArangoResultMaterializer.Convert` can run `DateTimeOffset.Parse` under `DateTimeStyles.RoundtripKind` and preserve the offset.
+- **`ProcessDictionaryKeys = false`** on the camel-case naming strategy used for serialization. The default `CamelCasePropertyNamesContractResolver` camel-cases not just C# property names but also `Dictionary<string, object?>` keys. Our bind-vars payload carries dictionary keys like `"WrittenAt"` and `"_key"` that must reach ArangoDB verbatim; without this flag, `WrittenAt` would be serialized as `writtenAt` on write and missed on read. C# property names on ArangoDBNetStandard's own request bodies (e.g. `BatchSize` → `batchSize`) still get camel-cased.
+
+### 11.4 AQL emission: `ArangoStatementEmitter`, `ArangoPropertySerializer`, `ArangoTraversalEmitter`
+
+The framework's identity model maps cleanly onto ArangoDB's document conventions:
+
+- Each node label → a **document collection** of that name. The node's key value is mirrored into `_key` (ArangoDB's per-collection unique identifier) as well as stored under the property's own name, so the materializer reads it like any other property.
+- Each relationship type → an **edge collection** of that name. Edges store `_from = "{startCollection}/{startKey}"` and `_to = "{endCollection}/{endKey}"` plus their own properties. Edges have no separate key in the framework's model; disconnect removes every edge matching the endpoint pair.
+
+The emitter is pure and stateless. Each `Emit*` method produces a `DataStatement` whose statement text is AQL and whose parameter dictionary keys follow ArangoDB's bind-variable convention: **value bind variables** use the key name verbatim (referenced in AQL as `@name`), while **collection bind variables** use a single leading `@` in the key (referenced in AQL as `@@name`). The emitter never inlines collection names — they always flow through `@@col` / `@@edge` bind vars.
+
+`ArangoPropertySerializer` flattens rich CLR types to JSON-friendly primitives before they reach Newtonsoft: `Guid` → string, `DateTimeOffset` / `DateTime` → ISO-8601 round-trip (`"o"`), `Enum` → its member name. The inverse path is `ArangoResultMaterializer.Convert`.
+
+`ArangoTraversalEmitter` is the AST → AQL workhorse — see §11.7.
+
+### 11.5 Execution: `ArangoRawStatementExecutor`
+
+The executor delegates to `ArangoDBClient.Cursor`. Each statement is sent as an AQL string plus a bind-vars dictionary; subsequent batches are fetched via the cursor's pagination API as the consumer pulls rows. The async path is a real async iterator; the sync path drains it into a list eagerly via `GetAwaiter().GetResult()` — same shape as the Neo4j and AGE executors.
+
+Ambient transaction routing reads `IGraphTransactionOpener.Active`: when it returns an `ArangoGraphTransaction`, the executor sets `CursorHeaderProperties.TransactionId` to the stream-transaction ID. The initial `PostCursorAsync` carries the header; continuation fetches via `PutCursorAsync` do not — the cursor is server-side bound to the transaction that opened it, so the header is redundant (and ArangoDBNetStandard 3.1.0's `PutCursorAsync` does not accept one).
+
+### 11.6 Transactions: `ArangoGraphTransactionOpener`, `ArangoGraphTransaction` (Stream Transactions)
+
+ArangoDB Stream Transactions require **every collection touched by the transaction to be declared up-front**. The framework's `ChangeTracker` opens the transaction before draining the pending queue, so the provider doesn't yet know which collections will be involved. The pragmatic workaround: at `OpenInternalAsync` time, the opener lists every non-system collection in the bound database (`Collection.GetCollectionsAsync(ExcludeSystem = true)`) and declares them all as read+write, plus `AllowImplicit = true` for good measure. One extra HTTP call per transaction begin; avoids coupling the opener to `IGraphModel`. Commit / abort go through `Transaction.CommitTransaction` / `Transaction.AbortTransaction`. Same one-ambient-at-a-time invariant and same dispose-path best-effort-abort logging as the other providers.
+
+### 11.7 Traversal: `ArangoTraversalEmitter`, `ArangoTraversalTranslator`
+
+The architectural payoff. The framework's `TraversalAst` is a linear segment list — `[Node a, Rel w(direction), Node p, Rel c(direction), Node m, ...]` — designed against Cypher's pattern syntax. AQL's graph traversal is step-based, so each (relationship, end-node) pair maps to a nested `FOR v, e IN min..max DIRECTION prev edge_collection`. A 2-segment Cypher pattern `(a)-[w]->(p)` becomes:
+
+```aql
+FOR a IN @@col_a
+  FOR p, w IN 1..1 OUTBOUND a @@col_w
+    [FILTERs / SORTs / LIMIT]
+    RETURN { <returnAlias>: <returnAlias> }
+```
+
+Direction maps trivially: `Outgoing` → `OUTBOUND`, `Incoming` → `INBOUND`, `Either` → `ANY`. The predicate AST also translates trivially — AQL has equivalents for every operator (`==`, `!=`, `<`, etc.), `CONTAINS` / `STARTS_WITH` for two of the three string operators, and AND / OR / NOT for boolean composition. The third string operator (`EndsWith`) needs a workaround because AQL 3.12 has no built-in `ENDS_WITH`; the emitter falls back to `SUBSTRING(text, LENGTH(text) - LENGTH(@p)) == @p`, which is safer than `LIKE("%..." )` (no wildcard collision with literal `%` / `_`).
+
+`TraversalKind.Create` and `TraversalKind.Merge` are supported on a **3-segment Node-Rel-Node pattern only** (matching the conformance tests' shape). The emitter generates an `INSERT` (Create) or `UPSERT` (Merge) against the edge collection with `_from` / `_to` derived from the matched endpoints. Longer patterns throw — Cypher's CREATE/MERGE on a chain extends ambiguously across multiple edges, and we'd need a separate AST shape to express that intent in AQL.
+
+### 11.8 Materialization: `ArangoResultMaterializer`, `ArangoJsonReader`
+
+Rows reach the materializer as `IReadOnlyDictionary<string, object?>` produced by `ArangoJsonReader`, which walks the `JObject` rows returned by `ArangoDBNetStandard`'s cursor and converts them recursively to a tree of `Dictionary<string, object?>`, `List<object?>`, and primitive boxed CLR values. Integer JSON numbers become `long`; fractional or out-of-range numbers become `double`; date-shaped strings stay strings (thanks to §11.3's `DateParseHandling.None`).
+
+The materializer's alias-keyed reads follow the same convention as the other providers: `"n"` for the node alias, `"r"` for the edge alias, `"cnt"` for the existence count. CLR conversion mirrors `ArangoPropertySerializer`: ISO-8601 string → `DateTimeOffset` / `DateTime`, hyphenated string → `Guid`, member-name string → enum, primitive widening via `Convert.ChangeType` under invariant culture.
+
+### 11.9 Schema bootstrap: `ArangoSchemaBootstrap`
+
+Unlike Cypher-family stores, ArangoDB does not auto-create collections on first write. The provider ships `ArangoSchemaBootstrap.EnsureCollectionsAsync(context, endpoint, db, user, password)` which walks `context.Model.Nodes` and `context.Model.Relationships` and creates any missing document / edge collections of the matching type. Idempotent: already-existing collections are left alone. Call it once at application startup (or once per test class in integration tests). This is the reason `IGraphModel` exposes `Nodes` / `Relationships` enumerations and `GraphContext` exposes `Model` (the latter marked `[EditorBrowsable(Advanced)]` to keep provider-extensibility hooks out of casual consumer auto-complete).
+
+### 11.10 What the conformance suite skips
+
+The same four raw-statement conformance tests are skipped against Arango — they send bare openCypher into `RawStatement.Execute`, and Arango's raw surface is AQL. Every other conformance test passes against `arangodb/arangodb:3.12`.
+
+---
+
+## 12. In-memory provider
 
 A third concrete provider whose entire database is a process-resident `Dictionary` + `List` pair. Lives in `OnixLabs.ElementFramework.InMemory`. It serves two purposes: an integration-test double for downstream applications, and the in-process implementation that proves the seam works even when there is no query language to emit.
 
-### 11.1 Wiring: `UseInMemory(string databaseName)`
+### 12.1 Wiring: `UseInMemory(string databaseName)`
 
 ```csharp
 InMemoryStore store = InMemoryStoreRegistry.GetOrCreate(databaseName);
@@ -687,7 +775,7 @@ builder.UseStatementEmitter(emitter)
 
 Multiple contexts that bind the same `databaseName` share state — the store is fetched from a process-wide registry.
 
-### 11.2 Storage: `InMemoryStore`, `InMemoryStoreRegistry`, `InMemoryEdge`
+### 12.2 Storage: `InMemoryStore`, `InMemoryStoreRegistry`, `InMemoryEdge`
 
 `InMemoryStore` is a CLR-private graph:
 
@@ -704,7 +792,7 @@ The store exposes `UpsertNode`, `RemoveNode`, `FindNode`, `NodesOfType`, `AddEdg
 
 The store itself is **not thread-safe** — concurrent contexts pointing at the same name aren't protected. The provider is for tests and small demos, not production throughput.
 
-### 11.3 Op-coded statements: `InMemoryStatementEmitter`, `InMemoryRawStatementExecutor`
+### 12.3 Op-coded statements: `InMemoryStatementEmitter`, `InMemoryRawStatementExecutor`
 
 Rather than emit a query-language string, the emitter encodes the operation as an **op-code** in `DataStatement.Statement` and packs the resolved type, key, and instance references into `DataStatement.Parameters`:
 
@@ -725,11 +813,11 @@ EmitConnect → DataStatement(
 
 The raw-statement escape hatch isn't useful for the in-memory provider in the way it is for Neo4j (there's no Cypher to drop down to), so the conformance suite skips the four raw-Cypher tests when running against in-memory.
 
-### 11.4 Materialization: `InMemoryResultMaterializer`
+### 12.4 Materialization: `InMemoryResultMaterializer`
 
 Trivial. Rows already carry the live CLR instance under the alias, so materialization is a typed cast. The five interface methods all funnel through one `Cast<T>` helper; the alias-free typed-read methods use the provider's internal `NodeAlias` / `EdgeAlias` / `CountAlias` constants. Returning the same instance the consumer stored means **reference identity is preserved** across reads — handy for tests that assert on shared mutable state.
 
-### 11.5 Transactions: snapshot-based
+### 12.5 Transactions: snapshot-based
 
 `InMemoryGraphTransaction` holds a private `Clone()` of the canonical store. Every read and write inside the transaction targets the clone; on commit, the canonical store's contents are replaced (`ReplaceWith`) with the clone's. On rollback or dispose-without-commit, the clone is discarded.
 
@@ -742,7 +830,7 @@ private InMemoryStore Target =>
 
 Same one-ambient-at-a-time invariant as the Neo4j provider.
 
-### 11.6 Traversal: `InMemoryTraversalTranslator`
+### 12.6 Traversal: `InMemoryTraversalTranslator`
 
 The in-memory provider does **not** emit a query and execute it — there is no query language. Instead, the translator interprets the `TraversalAst` directly:
 
@@ -756,7 +844,7 @@ The translator deliberately doesn't go through `IStatementEmitter` — there'd b
 
 ---
 
-## 12. Diagnostics surface
+## 13. Diagnostics surface
 
 The framework emits OpenTelemetry-compatible tracing and metrics via the .NET BCL's `System.Diagnostics.ActivitySource` and `System.Diagnostics.Metrics.Meter` APIs. There is no dependency on the OpenTelemetry SDK — consumers add `OpenTelemetry` packages on their side and subscribe to the framework's source and meter names. Three layers compose:
 
@@ -766,7 +854,7 @@ The framework emits OpenTelemetry-compatible tracing and metrics via the .NET BC
 
 The in-memory provider does not instrument — there is no IO to measure.
 
-### 12.1 Source names and conventions
+### 13.1 Source names and conventions
 
 Every project that emits spans exposes a `*Diagnostics` static class. Its public `SourceName`, `MeterName`, and `Version` constants give consumers the strings to register:
 
@@ -784,7 +872,7 @@ meterProviderBuilder
 
 The `ActivitySource` and `Meter` instances themselves are `internal` — consumers don't construct them, just subscribe by name.
 
-### 12.2 Framework spans
+### 13.2 Framework spans
 
 | Operation name | Kind | Tags |
 | --- | --- | --- |
@@ -795,7 +883,7 @@ The `ActivitySource` and `Meter` instances themselves are `internal` — consume
 
 The auto-open transaction inside `ChangeTracker.Flush` is deliberately invisible to the BeginTransaction/Commit spans — it bypasses `GraphTransactionFactory` so the change tracker can preserve pending operations across an auto-flush rollback (see [§5.4](#54-change-tracking-changetracker)). Only consumer-initiated transactions show the explicit BeginTransaction → Commit/Rollback hierarchy.
 
-### 12.3 Provider spans
+### 13.3 Provider spans
 
 | Provider | Operation name | Kind | Tags |
 | --- | --- | --- | --- |
@@ -803,10 +891,12 @@ The auto-open transaction inside `ChangeTracker.Flush` is deliberately invisible
 | Neo4j | `Neo4j.TranslateTraversal` | Internal | `db.system=neo4j`, `elementframework.traversal.kind`, `elementframework.traversal.segment_count`, `elementframework.traversal.predicate_count`, `elementframework.traversal.return_alias` |
 | AGE | `AGE.ExecuteStatement` | Client | `db.system=postgresql`, `elementframework.parameter.count`, `elementframework.transaction.mode`, `exception.type` (on error) |
 | AGE | `AGE.TranslateTraversal` | Internal | `db.system=postgresql`, `elementframework.traversal.kind`, `elementframework.traversal.segment_count`, `elementframework.traversal.predicate_count`, `elementframework.traversal.return_alias` |
+| Arango | `Arango.ExecuteStatement` | Client | `db.system=arangodb`, `elementframework.parameter.count`, `elementframework.transaction.mode`, `exception.type` (on error) |
+| Arango | `Arango.TranslateTraversal` | Internal | `db.system=arangodb`, `elementframework.traversal.kind`, `elementframework.traversal.segment_count`, `elementframework.traversal.predicate_count`, `elementframework.traversal.return_alias` |
 
-`ExecuteStatement` covers only the open-cursor / open-reader phase. Streaming continuation is intentionally outside the span — the driver's own `ActivitySource` emits the wire-layer fetches, and keeping our span tight to the actual round-trip avoids spans that hang for the duration of a long enumeration.
+`ExecuteStatement` covers only the open-cursor / open-reader phase. Streaming continuation is intentionally outside the span — the driver's own `ActivitySource` emits the wire-layer fetches, and keeping our span tight to the actual round-trip avoids spans that hang for the duration of a long enumeration. Note: ArangoDBNetStandard 3.1.0 does **not** emit a wire-layer `ActivitySource`, so for the Arango provider the framework's spans are the only observability of the round-trip; wire-level HTTP timing would need to come from `HttpClient` instrumentation separately.
 
-### 12.4 Counters
+### 13.4 Counters
 
 | Meter | Counter name | Tags |
 | --- | --- | --- |
@@ -815,8 +905,9 @@ The auto-open transaction inside `ChangeTracker.Flush` is deliberately invisible
 | Framework | `elementframework.transactions.terminals` | `outcome` (`committed` \| `rolledback` \| `commit_failed` \| `rollback_failed` \| `disposed_without_terminal`) |
 | Neo4j | `elementframework.neo4j.statements` | `elementframework.transaction.mode`, `outcome` |
 | AGE | `elementframework.age.statements` | `elementframework.transaction.mode`, `outcome` |
+| Arango | `elementframework.arango.statements` | `elementframework.transaction.mode`, `outcome` |
 
-### 12.5 PII discipline
+### 13.5 PII discipline
 
 Spans and counters attach only **structural metadata** — counts, kinds, modes, alias names, outcome tags. Never:
 
@@ -828,11 +919,11 @@ The xmldoc on every `*Diagnostics` class restates this discipline. New tags adde
 
 ---
 
-## 13. Testing architecture
+## 14. Testing architecture
 
 The test projects mirror the places functionality lives — pure code lives in unit tests, behaviour every provider must satisfy lives in the conformance suite, and each provider has its own integration project that runs the suite end-to-end.
 
-### 13.1 Unit tests
+### 14.1 Unit tests
 
 Two unit-test projects cover the pure code.
 
@@ -868,7 +959,7 @@ The fixture file `TestFixtures.cs` ships a tiny `Author`/`Post`/`Comment` plus `
 
 All three unit-test projects run without any external dependency.
 
-### 13.2 Conformance suite: `OnixLabs.ElementFramework.Conformance`
+### 14.2 Conformance suite: `OnixLabs.ElementFramework.Conformance`
 
 A non-test library that ships:
 
@@ -880,19 +971,19 @@ Each concrete provider integration project (`InMemory.IntegrationTests`, `Neo4j.
 
 The in-memory and AGE projects each skip four conformance tests that assert on raw-Cypher semantics — the in-memory provider doesn't speak Cypher at all, and AGE's raw surface is SQL-wrapped Cypher rather than bare Cypher.
 
-### 13.3 Provider integration tests
+### 14.3 Provider integration tests
 
 - `OnixLabs.ElementFramework.InMemory.IntegrationTests` — runs the conformance suite in-process against a fresh in-memory store registered per test.
 - `OnixLabs.ElementFramework.Neo4j.IntegrationTests` — runs the same conformance suite against a real Neo4j 5.x container managed by Testcontainers. Slow but real.
 - `OnixLabs.ElementFramework.AGE.IntegrationTests` — runs the same conformance suite against an Apache AGE container (`apache/age:release_PG16_1.6.0`) managed by Testcontainers. The same project also hosts the agtype reconnaissance probes (`AgeReconnaissanceTests`, `AgeReconnaissanceFixture`) that established how the agtype wire format behaves through Npgsql — these are retained as living documentation of the decisions encoded in the provider.
 
-### 13.4 CI
+### 14.4 CI
 
 `.github/workflows/ci.yml` runs six test steps in sequence: build → abstraction unit tests → Neo4j-provider unit tests → AGE-provider unit tests → in-memory conformance → Neo4j conformance → AGE conformance (the unit and in-memory passes fail fast on a regression before Docker is even started, shaving minutes off failed PRs). The publish step packs all five NuGet artefacts.
 
 ---
 
-## 14. Adding a new provider
+## 15. Adding a new provider
 
 A new provider needs:
 
@@ -909,11 +1000,11 @@ Conventions to honour:
 - **Transactional routing:** the executor must consult `opener.Active` to decide whether to run inside the ambient transaction or open a fresh auto-commit scope. The framework will not pass the transaction handle through.
 - **One ambient at a time:** the opener must throw `GraphTransactionAlreadyActiveException` when `Open()` is called and `Active` is non-null.
 
-The architecture is well-shaped for Cypher-family stores — Neo4j (Bolt) and Apache AGE (Postgres + agtype) are both built against this seam. For non-Cypher backends (Gremlin, SPARQL), the predicate tree and traversal AST work, but the linear segment list assumes a Cypher-style path. See [§15](#15-known-constraints-and-non-goals).
+The architecture is well-shaped for Cypher-family stores — Neo4j (Bolt) and Apache AGE (Postgres + agtype) are both built against this seam. For non-Cypher backends (Gremlin, SPARQL), the predicate tree and traversal AST work, but the linear segment list assumes a Cypher-style path. See [§16](#16-known-constraints-and-non-goals).
 
 ---
 
-## 15. Known constraints and non-goals
+## 16. Known constraints and non-goals
 
 This is the architectural counterpart to [`docs/production-readiness.md`](production-readiness.md), which is the operational view. Read both together.
 
@@ -927,7 +1018,7 @@ Nested transactions are not supported. Concurrent transactions on a single conte
 Each provider owns its own connection-management strategy (Neo4j caches drivers process-wide; AGE caches Npgsql data sources process-wide; in-memory has nothing to pool). The framework does not standardize lifetime, eviction, or health.
 
 **Logging, tracing, and metrics; no health probes yet.**
-The framework consumes `ILoggerFactory` (set via `GraphContextOptionsBuilder.UseLoggerFactory` or injected through the SP-aware `AddGraphContext` overload) and writes diagnostic events: every Cypher statement at `Debug` (with parameter count, not values), every transaction open / commit / rollback / best-effort-rollback-on-dispose at `Information`, every previously-swallowed dispose-path exception at `Warning`, every `ChangeTracker.Flush` start/end at `Debug` (rollback events at `Warning`). OpenTelemetry-compatible tracing and metrics are also shipped — see [§12](#12-diagnostics-surface). There are no health probes yet.
+The framework consumes `ILoggerFactory` (set via `GraphContextOptionsBuilder.UseLoggerFactory` or injected through the SP-aware `AddGraphContext` overload) and writes diagnostic events: every Cypher statement at `Debug` (with parameter count, not values), every transaction open / commit / rollback / best-effort-rollback-on-dispose at `Information`, every previously-swallowed dispose-path exception at `Warning`, every `ChangeTracker.Flush` start/end at `Debug` (rollback events at `Warning`). OpenTelemetry-compatible tracing and metrics are also shipped — see [§13](#13-diagnostics-surface). There are no health probes yet.
 
 **Sync-over-async surface (Neo4j and AGE).**
 Both the Neo4j driver and Npgsql are async-first; the providers' sync surfaces bridge via `GetAwaiter().GetResult()`. This deadlocks under hosts that capture a synchronization context (ASP.NET Classic, WinForms, WPF). Use the async surface in those hosts. ASP.NET Core, console, and modern hosted-service consumers are unaffected. **The sync surface is intentional and stays.** The abstraction must accommodate providers that ship sync-only, async-only, or both — removing sync would exclude an entire class of provider. The deadlock vector is therefore a documented footgun, not a defect; a Roslyn analyzer to flag the sync surface under sync-context-capturing project SDKs is the next planned mitigation.

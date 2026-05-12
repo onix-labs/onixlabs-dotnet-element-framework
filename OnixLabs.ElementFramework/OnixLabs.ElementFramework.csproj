@@ -6,6 +6,7 @@
         <InternalsVisibleTo Include="OnixLabs.ElementFramework.UnitTests"/>
         <InternalsVisibleTo Include="OnixLabs.ElementFramework.Neo4j.UnitTests"/>
         <InternalsVisibleTo Include="OnixLabs.ElementFramework.AGE.UnitTests"/>
+        <InternalsVisibleTo Include="OnixLabs.ElementFramework.Arango.UnitTests"/>
         <ProjectReference Include="..\OnixLabs.ElementFramework.Abstractions\OnixLabs.ElementFramework.Abstractions.csproj"/>
     </ItemGroup>
 </Project>
