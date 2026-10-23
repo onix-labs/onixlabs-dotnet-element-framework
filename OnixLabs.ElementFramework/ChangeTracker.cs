@@ -29,7 +29,7 @@ namespace OnixLabs.ElementFramework;
 /// Represents a per-context change tracker that holds the identity map and ordered pending operations for a single <see cref="GraphContext"/>.
 /// </summary>
 /// <remarks>
-/// Flush is atomic. When no consumer-owned ambient transaction is active, an ambient transaction is auto-opened for the flush duration, every staged operation runs through it, and the transaction is committed on full success or rolled back on the first failure. When a consumer-owned ambient transaction is already active, operations execute within that transaction and lifecycle remains the consumer's responsibility. Pending operations are cleared only on success; on failure the original snapshot is preserved so a corrected retry can replay the full batch.
+/// Flush is atomic. When no consumer-owned ambient transaction is active, an ambient transaction is auto-opened for the flush duration, every staged operation runs through it, and the transaction is committed on full success or rolled back on the first failure. When a consumer-owned ambient transaction is already active, operations execute within that transaction and lifecycle remains the consumer's responsibility. Pending operations are cleared only on success; on failure the original snapshot is preserved so a corrected retry can replay the full batch. Consumers that want to abandon a failed batch instead call <see cref="GraphContext.ClearChanges"/>, which delegates to <see cref="Reset"/>.
 /// </remarks>
 internal sealed class ChangeTracker : IChangeTracker
 {
@@ -119,7 +119,7 @@ internal sealed class ChangeTracker : IChangeTracker
                 }
                 catch (Exception exception)
                 {
-                    logger.LogWarning(exception, "Flush failed; rolling back auto-opened transaction. {OperationCount} operation(s) remain pending for retry.", snapshot.Count);
+                    logger.LogWarning(exception, "Flush failed; rolling back auto-opened transaction. {OperationCount} operation(s) remain pending for retry; call GraphContext.ClearChanges() to discard them.", snapshot.Count);
                     transaction.Rollback();
                     throw;
                 }
@@ -181,7 +181,7 @@ internal sealed class ChangeTracker : IChangeTracker
                 }
                 catch (Exception exception)
                 {
-                    logger.LogWarning(exception, "Flush failed (async); rolling back auto-opened transaction. {OperationCount} operation(s) remain pending for retry.", snapshot.Count);
+                    logger.LogWarning(exception, "Flush failed (async); rolling back auto-opened transaction. {OperationCount} operation(s) remain pending for retry; call GraphContext.ClearChanges() to discard them.", snapshot.Count);
                     await transaction.RollbackAsync(token).ConfigureAwait(false);
                     throw;
                 }

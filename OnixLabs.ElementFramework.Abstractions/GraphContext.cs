@@ -120,6 +120,16 @@ public abstract class GraphContext : IDisposable, IAsyncDisposable
     /// <exception cref="GraphContextException">Thrown when the flush fails.</exception>
     public Task<int> SaveChangesAsync(CancellationToken token = default) => services.ChangeTracker.FlushAsync(token);
 
+    /// <summary>
+    /// Discards all pending tracked changes and clears the identity map.
+    /// </summary>
+    /// <remarks>
+    /// A failed save keeps its pending changes so that a corrected retry can replay them. Call this method to abandon them instead, for example when the failure is permanent. After clearing, <see cref="INodeSet{T}.FindById"/> reads from the underlying store rather than returning previously tracked instances.
+    /// <para/>
+    /// Clearing affects only this context's in-memory state. Nothing already written to the underlying store is affected, and an active transaction is neither committed nor rolled back; it remains open, and any changes already saved within it are committed or rolled back with it as usual.
+    /// </remarks>
+    public void ClearChanges() => services.ChangeTracker.Reset();
+
     /// <inheritdoc/>
     public void Dispose()
     {

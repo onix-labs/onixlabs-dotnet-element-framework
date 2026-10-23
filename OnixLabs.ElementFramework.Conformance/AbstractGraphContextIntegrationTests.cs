@@ -308,6 +308,54 @@ public abstract class AbstractGraphContextIntegrationTests(ITestOutputHelper out
         Assert.Null(Context.Nodes<Author>().FindById(author.Id));
     }
 
+    [Fact(DisplayName = "ClearChanges should discard staged changes so the next save writes nothing")]
+    public void ClearChangesShouldDiscardStagedChanges()
+    {
+        Author author = Author.Create("Alice");
+        Context.Nodes<Author>().Add(author);
+
+        Context.ClearChanges();
+
+        Assert.Equal(0, Context.SaveChanges());
+        Assert.Null(Context.Nodes<Author>().FindById(author.Id));
+    }
+
+    [Fact(DisplayName = "ClearChanges should not affect nodes already written to the store")]
+    public void ClearChangesShouldNotAffectTheStore()
+    {
+        Author author = Author.Create("Alice");
+        Context.Nodes<Author>().Add(author);
+        Context.SaveChanges();
+
+        Context.ClearChanges();
+
+        Author? found = Context.Nodes<Author>().FindById(author.Id);
+        Assert.NotNull(found);
+        Assert.Equal(author.Name, found.Name);
+    }
+
+    [Fact(DisplayName = "ClearChanges within a transaction should discard only unsaved changes and leave the transaction committable")]
+    public void ClearChangesWithinTransactionShouldLeaveTransactionCommittable()
+    {
+        Author saved = Author.Create("Alice");
+        Author discarded = Author.Create("Bob");
+
+        using (IGraphTransaction transaction = Context.BeginTransaction())
+        {
+            Context.Nodes<Author>().Add(saved);
+            Context.SaveChanges();
+            Context.Nodes<Author>().Add(discarded);
+
+            Context.ClearChanges();
+
+            Assert.Equal(0, Context.SaveChanges());
+            transaction.Commit();
+        }
+
+        Assert.NotNull(Context.Nodes<Author>().FindById(saved.Id));
+        Assert.Null(Context.Nodes<Author>().FindById(discarded.Id));
+    }
+
     [Fact(DisplayName = "Traversal Match should yield matching nodes")]
     public void TraversalMatchShouldYieldMatchingNodes()
     {
