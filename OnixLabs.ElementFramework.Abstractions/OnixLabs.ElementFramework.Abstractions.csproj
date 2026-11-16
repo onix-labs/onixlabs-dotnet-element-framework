@@ -6,6 +6,6 @@
     <ItemGroup>
         <InternalsVisibleTo Include="OnixLabs.ElementFramework"/>
         <InternalsVisibleTo Include="OnixLabs.ElementFramework.UnitTests"/>
-        <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.7"/>
+        <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="$(MicrosoftExtensionsVersion)"/>
     </ItemGroup>
 </Project>
