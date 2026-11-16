@@ -4,7 +4,7 @@
 
 Element Framework is a modern Object-Graph Mapper (OGM) for .NET that brings the same ergonomics as Entity Framework to labelled-property-graph databases. Model your domain in plain CLR types, configure them fluently, and let the framework translate change tracking and graph traversals into provider-native statements.
 
-Targets **net8.0**, **net9.0**, and **net10.0**. Ships providers for **Neo4j** (Cypher over Bolt), **Apache AGE** (Cypher-wrapped-in-SQL over Postgres), **ArangoDB** (AQL over HTTP), and an **in-memory** store for tests.
+Targets **net8.0**, **net9.0**, **net10.0**, and **net11.0**. Ships providers for **Neo4j** (Cypher over Bolt), **Apache AGE** (Cypher-wrapped-in-SQL over Postgres), **ArangoDB** (AQL over HTTP), and an **in-memory** store for tests.
 
 ## Documentation
 

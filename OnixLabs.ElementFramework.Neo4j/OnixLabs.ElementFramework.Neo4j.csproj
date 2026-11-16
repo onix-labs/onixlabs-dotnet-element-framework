@@ -10,6 +10,6 @@
       <ProjectReference Include="..\OnixLabs.ElementFramework\OnixLabs.ElementFramework.csproj" />
     </ItemGroup>
     <ItemGroup>
-      <PackageReference Include="Neo4j.Driver" Version="6.0.0" />
+      <PackageReference Include="Neo4j.Driver" Version="6.5.1" />
     </ItemGroup>
 </Project>

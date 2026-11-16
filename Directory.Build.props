@@ -1,10 +1,10 @@
 <Project>
     <PropertyGroup>
-        <Version>2.1.0</Version>
-        <PackageVersion>2.1.0</PackageVersion>
-        <AssemblyVersion>2.1.0</AssemblyVersion>
+        <Version>2.2.0</Version>
+        <PackageVersion>2.2.0</PackageVersion>
+        <AssemblyVersion>2.2.0</AssemblyVersion>
 
-        <TargetFrameworks>net8.0;net9.0;net10.0</TargetFrameworks>
+        <TargetFrameworks>net8.0;net9.0;net10.0;net11.0</TargetFrameworks>
         <LangVersion>14</LangVersion>
         <Nullable>enable</Nullable>
         <ImplicitUsings>enable</ImplicitUsings>
@@ -23,7 +23,16 @@
         <PublishRepositoryUrl>true</PublishRepositoryUrl>
         <EmbedUntrackedSources>true</EmbedUntrackedSources>
     </PropertyGroup>
+    <PropertyGroup>
+        <!-- The 11.x packages only support net10.0 and later; earlier targets stay on the 10.x line. -->
+        <MicrosoftExtensionsVersion>11.0.0</MicrosoftExtensionsVersion>
+        <SourceLinkVersion>11.0.100</SourceLinkVersion>
+    </PropertyGroup>
+    <PropertyGroup Condition="'$(TargetFramework)' == 'net8.0' Or '$(TargetFramework)' == 'net9.0'">
+        <MicrosoftExtensionsVersion>10.0.15</MicrosoftExtensionsVersion>
+        <SourceLinkVersion>10.0.404</SourceLinkVersion>
+    </PropertyGroup>
     <ItemGroup>
-        <PackageReference Include="Microsoft.SourceLink.GitHub" Version="8.0.0" PrivateAssets="All"/>
+        <PackageReference Include="Microsoft.SourceLink.GitHub" Version="$(SourceLinkVersion)" PrivateAssets="All"/>
     </ItemGroup>
 </Project>

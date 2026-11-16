@@ -55,7 +55,7 @@ Run the in-memory conformance suite before the Dockerised ones — it catches ab
 
 ### Targets
 
-Multi-targets **net8.0**, **net9.0**, **net10.0**. The build runs every target; a change that only compiles on one is a bug.
+Multi-targets **net8.0**, **net9.0**, **net10.0**, **net11.0**. The build runs every target; a change that only compiles on one is a bug.
 
 ### Public surface discipline
 
